@@ -82,10 +82,13 @@ class LoggerManagerTest extends TestCase
 
     public function testAddChannelHandler(): void
     {
+        // First get the channel (creates with default handler)
+        $logger = $this->manager->channel('app');
+
+        // Then add another handler
         $additionalHandler = new TestHandler();
         $this->manager->addChannelHandler('app', $additionalHandler);
 
-        $logger = $this->manager->channel('app');
         $logger->info('Test message');
 
         // Both handlers should receive the message

@@ -109,26 +109,33 @@ class MemoryProcessor implements ProcessorInterface
 
     /**
      * Parse PHP memory string to bytes
+     *
+     * Uses float to avoid integer overflow on 32-bit systems.
      */
     private function parseBytes(string $value): int
     {
         $value = trim($value);
         $last = strtolower(substr($value, -1));
-        $numValue = (int) $value;
+        $numValue = (float) $value;
 
         switch ($last) {
             case 'g':
-                $numValue *= 1024 * 1024 * 1024;
+                $numValue *= 1024.0 * 1024.0 * 1024.0;
                 break;
             case 'm':
-                $numValue *= 1024 * 1024;
+                $numValue *= 1024.0 * 1024.0;
                 break;
             case 'k':
-                $numValue *= 1024;
+                $numValue *= 1024.0;
                 break;
         }
 
-        return $numValue;
+        // Return as int, capped at PHP_INT_MAX
+        if ($numValue > PHP_INT_MAX) {
+            return PHP_INT_MAX;
+        }
+
+        return (int) $numValue;
     }
 
     /**

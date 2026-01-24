@@ -133,12 +133,15 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
      */
     public function format(LogRecord $record): string
     {
+        // Sanitize message against log injection
+        $message = $this->sanitizeString($record->message);
+
         $vars = [
             '%datetime%' => $record->datetime->format($this->dateFormat),
-            '%channel%' => $record->channel,
+            '%channel%' => $this->sanitizeString($record->channel),
             '%level_name%' => str_pad($record->level->name, 9), // Pad for alignment
             '%level%' => strtolower($record->level->name),
-            '%message%' => $record->message,
+            '%message%' => $message,
             '%pid%' => $this->includeProcessId ? '[pid:' . getmypid() . ']' : '',
             '%memory%' => $this->includeMemoryUsage ? '[mem:' . $this->formatBytes(memory_get_usage(true)) . ']' : '',
         ];
@@ -170,8 +173,15 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
         $output = strtr($this->format, $vars);
 
         // Clean up empty placeholders and trailing separators
-        $output = preg_replace('/\s*\|\s*\n/', "\n", $output) ?? $output;
-        $output = preg_replace('/\s+\n/', "\n", $output) ?? $output;
+        $result = preg_replace('/\s*\|\s*\n/', "\n", $output);
+        if ($result !== null) {
+            $output = $result;
+        }
+
+        $result = preg_replace('/\s+\n/', "\n", $output);
+        if ($result !== null) {
+            $output = $result;
+        }
 
         // Handle line breaks in message
         if (!$this->allowInlineLineBreaks) {
@@ -184,6 +194,26 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
         }
 
         return $output;
+    }
+
+    /**
+     * Sanitize string to prevent log injection
+     *
+     * Removes newlines and ANSI escape sequences that could
+     * confuse log parsers or hide content in terminals.
+     */
+    private function sanitizeString(string $value): string
+    {
+        // Remove ANSI escape sequences
+        $value = preg_replace('/\x1b\[[0-9;]*m/', '', $value) ?? $value;
+
+        // Replace newlines with visible marker
+        $value = str_replace(["\r\n", "\r", "\n"], ' ⏎ ', $value);
+
+        // Remove other control characters except tab
+        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value) ?? $value;
+
+        return $value;
     }
 
     /**
@@ -205,7 +235,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
     /**
      * Convert data to JSON string
      */
-    private function toJson(mixed $data): string
+    protected function toJson($data, bool $ignoreErrors = false): string
     {
         if (empty($data)) {
             return '[]';
@@ -213,7 +243,14 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
 
         $json = json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 
-        return $json !== false ? $json : '[]';
+        if ($json === false) {
+            if ($ignoreErrors) {
+                return '[]';
+            }
+            return parent::toJson($data, true);
+        }
+
+        return $json;
     }
 
     /**
@@ -295,12 +332,13 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
     {
         $units = ['B', 'KB', 'MB', 'GB'];
         $factor = 0;
+        $value = (float) $bytes;
 
-        while ($bytes >= 1024 && $factor < count($units) - 1) {
-            $bytes /= 1024;
+        while ($value >= 1024 && $factor < count($units) - 1) {
+            $value /= 1024;
             $factor++;
         }
 
-        return round($bytes, 1) . $units[$factor];
+        return round($value, 1) . $units[$factor];
     }
 }

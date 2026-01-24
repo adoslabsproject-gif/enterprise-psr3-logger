@@ -21,6 +21,7 @@ use Monolog\LogRecord;
  * - Automatic file retention (delete old files)
  * - Gzip compression of rotated files
  * - Atomic writes (via file locking)
+ * - Path validation (prevents directory traversal)
  *
  * FILE NAMING:
  * - app.log (current)
@@ -41,6 +42,7 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
     public const ROTATION_NONE = 'none';
 
     private string $filename;
+    private string $baseDir;
     private string $rotationType;
     private int $maxFiles;
     private int $maxFileSize;
@@ -60,6 +62,8 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
      * @param int $maxFileSize Maximum file size in bytes before rotation (0 = size-based rotation disabled)
      * @param bool $compress Compress rotated files with gzip
      * @param bool $bubble Whether to bubble to next handler
+     *
+     * @throws \InvalidArgumentException If filename contains path traversal sequences
      */
     public function __construct(
         string $filename,
@@ -72,11 +76,96 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
     ) {
         parent::__construct($level, $bubble);
 
-        $this->filename = $filename;
+        // Validate and sanitize path
+        $this->filename = $this->validatePath($filename);
+        $this->baseDir = dirname($this->filename);
         $this->rotationType = $rotationType;
         $this->maxFiles = max(0, $maxFiles);
         $this->maxFileSize = max(0, $maxFileSize);
         $this->compress = $compress;
+    }
+
+    /**
+     * Validate path to prevent directory traversal attacks
+     *
+     * @throws \InvalidArgumentException If path is invalid or contains traversal
+     */
+    private function validatePath(string $path): string
+    {
+        // Check for null bytes (PHP path injection)
+        if (str_contains($path, "\0")) {
+            throw new \InvalidArgumentException('Path contains null bytes');
+        }
+
+        // Check for obvious traversal attempts
+        if (preg_match('#(?:^|[\\\\/])\.\.(?:[\\\\/]|$)#', $path)) {
+            throw new \InvalidArgumentException('Path contains directory traversal sequences');
+        }
+
+        // Normalize path separators
+        $path = str_replace('\\', '/', $path);
+
+        // For php:// streams, allow them through
+        if (str_starts_with($path, 'php://')) {
+            return $path;
+        }
+
+        // Get directory and ensure it can be resolved
+        $dir = dirname($path);
+
+        // If directory exists, validate with realpath
+        if (is_dir($dir)) {
+            $realDir = realpath($dir);
+            if ($realDir === false) {
+                throw new \InvalidArgumentException("Cannot resolve directory: {$dir}");
+            }
+            return $realDir . '/' . basename($path);
+        }
+
+        // Directory doesn't exist yet - validate parent exists
+        $parentDir = dirname($dir);
+        if ($parentDir !== '.' && $parentDir !== '/' && !is_dir($parentDir)) {
+            // Allow creation of nested directories, but validate no traversal
+            $normalized = $this->normalizePath($path);
+            if ($normalized === null) {
+                throw new \InvalidArgumentException("Invalid path: {$path}");
+            }
+            return $normalized;
+        }
+
+        return $path;
+    }
+
+    /**
+     * Normalize path without requiring it to exist
+     */
+    private function normalizePath(string $path): ?string
+    {
+        $parts = explode('/', $path);
+        $normalized = [];
+
+        foreach ($parts as $part) {
+            if ($part === '' || $part === '.') {
+                continue;
+            }
+            if ($part === '..') {
+                if (empty($normalized)) {
+                    return null; // Trying to go above root
+                }
+                array_pop($normalized);
+            } else {
+                $normalized[] = $part;
+            }
+        }
+
+        $result = implode('/', $normalized);
+
+        // Preserve absolute path
+        if (str_starts_with($path, '/')) {
+            $result = '/' . $result;
+        }
+
+        return $result;
     }
 
     /**
@@ -153,17 +242,31 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
 
     /**
      * Check if rotation is needed
+     *
+     * Note: For size-based rotation in multi-process environments,
+     * we check actual file size, not just tracked size.
      */
     private function needsRotation(string $targetFile): bool
     {
-        // Size-based rotation
-        if ($this->maxFileSize > 0 && $this->currentFileSize >= $this->maxFileSize) {
-            return true;
-        }
-
         // Date-based rotation (file changed)
         if ($this->currentFilename !== null && $this->currentFilename !== $targetFile) {
             return true;
+        }
+
+        // Size-based rotation - check actual file size for multi-process safety
+        if ($this->maxFileSize > 0) {
+            // Use actual file size if file exists
+            if ($this->currentFilename !== null && file_exists($this->currentFilename)) {
+                clearstatcache(true, $this->currentFilename);
+                $actualSize = @filesize($this->currentFilename);
+                if ($actualSize !== false && $actualSize >= $this->maxFileSize) {
+                    return true;
+                }
+            }
+            // Also check tracked size as fallback
+            if ($this->currentFileSize >= $this->maxFileSize) {
+                return true;
+            }
         }
 
         return false;
@@ -219,34 +322,74 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
 
     /**
      * Compress a file using gzip
+     *
+     * Uses try-finally to guarantee resource cleanup even on failure.
      */
     private function compressFile(string $filename): void
     {
+        // Validate file is within base directory
+        $realPath = realpath($filename);
+        if ($realPath === false) {
+            error_log("RotatingFileHandler: Cannot compress non-existent file: {$filename}");
+            return;
+        }
+
+        $realBaseDir = realpath($this->baseDir);
+        if ($realBaseDir !== false && !str_starts_with($realPath, $realBaseDir)) {
+            error_log("RotatingFileHandler: Refusing to compress file outside base directory: {$filename}");
+            return;
+        }
+
         $gzFile = $filename . '.gz';
+        $source = null;
+        $dest = null;
+        $success = false;
 
-        $source = fopen($filename, 'rb');
-        if ($source === false) {
-            return;
-        }
+        try {
+            $source = @fopen($filename, 'rb');
+            if ($source === false) {
+                error_log("RotatingFileHandler: Failed to open source file for compression: {$filename}");
+                return;
+            }
 
-        $dest = gzopen($gzFile, 'wb9');
-        if ($dest === false) {
-            fclose($source);
-            return;
-        }
+            $dest = @gzopen($gzFile, 'wb9');
+            if ($dest === false) {
+                error_log("RotatingFileHandler: Failed to create gzip file: {$gzFile}");
+                return;
+            }
 
-        while (!feof($source)) {
-            $chunk = fread($source, 65536);
-            if ($chunk !== false) {
-                gzwrite($dest, $chunk);
+            while (!feof($source)) {
+                $chunk = fread($source, 65536);
+                if ($chunk === false) {
+                    error_log("RotatingFileHandler: Failed to read chunk during compression: {$filename}");
+                    return;
+                }
+                if (gzwrite($dest, $chunk) === false) {
+                    error_log("RotatingFileHandler: Failed to write gzip chunk: {$gzFile}");
+                    return;
+                }
+            }
+
+            $success = true;
+        } finally {
+            // Always close resources
+            if ($source !== null && is_resource($source)) {
+                fclose($source);
+            }
+            if ($dest !== null && is_resource($dest)) {
+                gzclose($dest);
+            }
+
+            // Only delete original if compression was successful
+            if ($success) {
+                @unlink($filename);
+            } else {
+                // Remove partial gzip file on failure
+                if (file_exists($gzFile)) {
+                    @unlink($gzFile);
+                }
             }
         }
-
-        fclose($source);
-        gzclose($dest);
-
-        // Remove original file after successful compression
-        unlink($filename);
     }
 
     /**

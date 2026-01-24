@@ -89,6 +89,9 @@ class GroupHandler implements HandlerInterface
 
     /**
      * {@inheritdoc}
+     *
+     * Returns false if the record was handled AND bubbling is disabled.
+     * Returns true if the record should continue to the next handler.
      */
     public function handle(LogRecord $record): bool
     {
@@ -106,7 +109,13 @@ class GroupHandler implements HandlerInterface
             }
         }
 
-        return $handled === false || $this->bubble;
+        // If handled and bubble is false, stop propagation (return false)
+        // If not handled or bubble is true, continue propagation (return true)
+        if ($handled && !$this->bubble) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

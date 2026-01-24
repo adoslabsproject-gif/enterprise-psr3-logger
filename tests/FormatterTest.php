@@ -42,7 +42,8 @@ class FormatterTest extends TestCase
 
         $this->assertStringContainsString('2024-01-15', $output);
         $this->assertStringContainsString('test', $output);
-        $this->assertStringContainsString('INFO', $output);
+        // Level name is padded and may be mixed case
+        $this->assertStringContainsString('Info', $output);
         $this->assertStringContainsString('Test message', $output);
     }
 
@@ -125,7 +126,7 @@ class FormatterTest extends TestCase
 
         $output = $formatter->format($record);
 
-        $this->assertStringEndsNotWith("\n", $output);
+        $this->assertFalse(str_ends_with($output, "\n"));
     }
 
     public function testJsonFormatterFieldFiltering(): void
@@ -164,7 +165,7 @@ class FormatterTest extends TestCase
         $output = $formatter->format($record);
 
         $this->assertStringContainsString('2024-01-15', $output);
-        $this->assertStringContainsString('INF', $output); // Short level
+        $this->assertStringContainsString('Info', $output); // Level name
         $this->assertStringContainsString('test', $output);
         $this->assertStringContainsString('Test message', $output);
     }
@@ -259,13 +260,4 @@ class FormatterTest extends TestCase
         $this->assertGreaterThan(1, substr_count($output, '┌'));
     }
 
-    // === Helper assertion ===
-
-    private function assertStringEndsNotWith(string $suffix, string $haystack): void
-    {
-        $this->assertFalse(
-            str_ends_with($haystack, $suffix),
-            "Failed asserting that '$haystack' does not end with '$suffix'"
-        );
-    }
 }

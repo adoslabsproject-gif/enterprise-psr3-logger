@@ -103,8 +103,8 @@ class DetailedLineFormatter extends NormalizerFormatter implements FormatterInte
         $output[] = $header;
 
         if ($this->multiLine) {
-            // Message line
-            $output[] = '  ▶ ' . $record->message;
+            // Message line (sanitized)
+            $output[] = '  ▶ ' . $this->sanitizeString($record->message);
 
             // Context line (if not empty)
             $context = $this->normalize($record->context);
@@ -356,12 +356,27 @@ class DetailedLineFormatter extends NormalizerFormatter implements FormatterInte
     {
         $units = ['B', 'KB', 'MB', 'GB'];
         $factor = 0;
+        $value = (float) $bytes;
 
-        while ($bytes >= 1024 && $factor < count($units) - 1) {
-            $bytes /= 1024;
+        while ($value >= 1024 && $factor < count($units) - 1) {
+            $value /= 1024;
             $factor++;
         }
 
-        return round($bytes, 1) . $units[$factor];
+        return round($value, 1) . $units[$factor];
+    }
+
+    /**
+     * Sanitize string to prevent log injection
+     */
+    private function sanitizeString(string $value): string
+    {
+        // Remove ANSI escape sequences
+        $value = preg_replace('/\x1b\[[0-9;]*m/', '', $value) ?? $value;
+
+        // Remove other control characters except tab and newline
+        $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value) ?? $value;
+
+        return $value;
     }
 }

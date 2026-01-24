@@ -117,7 +117,7 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
      */
     public function format(LogRecord $record): string
     {
-        $normalized = $this->normalizeRecord($record);
+        $normalized = $this->normalizeLogRecord($record);
 
         return $this->toJson($normalized) . ($this->appendNewline ? "\n" : '');
     }
@@ -132,7 +132,7 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
         $normalized = [];
 
         foreach ($records as $record) {
-            $normalized[] = $this->normalizeRecord($record);
+            $normalized[] = $this->normalizeLogRecord($record);
         }
 
         if ($this->batchMode === self::BATCH_MODE_JSON) {
@@ -153,7 +153,7 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
      *
      * @return array<string, mixed>
      */
-    private function normalizeRecord(LogRecord $record): array
+    protected function normalizeLogRecord(LogRecord $record): array
     {
         $data = [
             'timestamp' => $record->datetime->format(\DateTimeInterface::RFC3339_EXTENDED),
@@ -204,13 +204,17 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
      * Encode data to JSON
      *
      * @param mixed $data
+     * @param bool $ignoreErrors
      * @return string
      */
-    private function toJson(mixed $data): string
+    protected function toJson($data, bool $ignoreErrors = false): string
     {
         $json = json_encode($data, $this->jsonFlags);
 
         if ($json === false) {
+            if ($ignoreErrors) {
+                return '{}';
+            }
             // Fallback for encoding errors
             $error = json_last_error_msg();
             return json_encode([

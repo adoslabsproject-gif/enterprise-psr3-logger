@@ -58,6 +58,8 @@ class StreamHandler extends AbstractProcessingHandler implements HandlerInterfac
      * @param bool $bubble Whether to bubble to next handler
      * @param int|null $filePermission File permissions (null = default)
      * @param bool $useLocking Use file locking on write
+     *
+     * @throws \InvalidArgumentException If path contains traversal sequences
      */
     public function __construct(
         string $stream,
@@ -68,9 +70,34 @@ class StreamHandler extends AbstractProcessingHandler implements HandlerInterfac
     ) {
         parent::__construct($level, $bubble);
 
-        $this->url = $stream;
+        $this->url = $this->validatePath($stream);
         $this->filePermission = $filePermission;
         $this->useLocking = $useLocking;
+    }
+
+    /**
+     * Validate path to prevent directory traversal attacks
+     *
+     * @throws \InvalidArgumentException If path contains traversal
+     */
+    private function validatePath(string $path): string
+    {
+        // Check for null bytes
+        if (str_contains($path, "\0")) {
+            throw new \InvalidArgumentException('Stream path contains null bytes');
+        }
+
+        // Allow php:// streams
+        if (str_starts_with($path, 'php://')) {
+            return $path;
+        }
+
+        // Check for directory traversal
+        if (preg_match('#(?:^|[\\\\/])\.\.(?:[\\\\/]|$)#', $path)) {
+            throw new \InvalidArgumentException('Stream path contains directory traversal sequences');
+        }
+
+        return $path;
     }
 
     /**
