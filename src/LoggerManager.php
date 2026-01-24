@@ -31,11 +31,22 @@ use Psr\Log\LoggerInterface;
  * $auditLog->info('User created', ['user_id' => 123]);
  * ```
  *
- * CHANNEL INHERITANCE:
+ * CHANNEL INHERITANCE (ADDITIVE):
  * Channels can be hierarchical (e.g., 'app.http', 'app.db').
- * Child channels inherit parent handlers unless overridden.
+ * Child channels ACCUMULATE handlers from ALL parent levels.
  *
- * @package Senza1dio\EnterprisePSR3Logger
+ * Example:
+ * ```php
+ * $manager->setChannelHandlers('app', [$fileHandler]);
+ * $manager->setChannelHandlers('app.http', [$httpHandler]);
+ *
+ * // 'app.http.requests' will get BOTH handlers:
+ * // - $fileHandler (from 'app')
+ * // - $httpHandler (from 'app.http')
+ * ```
+ *
+ * If you want a child channel to use ONLY its own handlers (not inherited),
+ * explicitly set handlers for that channel using setChannelHandlers().
  */
 class LoggerManager
 {
@@ -92,6 +103,7 @@ class LoggerManager
     public function setDefaultHandler(HandlerInterface $handler): self
     {
         $this->defaultHandlers = [$handler];
+
         return $this;
     }
 
@@ -104,6 +116,7 @@ class LoggerManager
     public function addDefaultHandler(HandlerInterface $handler): self
     {
         $this->defaultHandlers[] = $handler;
+
         return $this;
     }
 
@@ -116,6 +129,7 @@ class LoggerManager
     public function addDefaultProcessor(ProcessorInterface|callable $processor): self
     {
         $this->defaultProcessors[] = $processor;
+
         return $this;
     }
 
@@ -130,8 +144,10 @@ class LoggerManager
     {
         $this->channelHandlers[$channel] = $handlers;
 
-        // Reconfigure existing logger if already created
+        // Close and reconfigure existing logger if already created
         if (isset($this->loggers[$channel])) {
+            // Close old logger to release resources
+            $this->loggers[$channel]->close();
             $this->loggers[$channel] = $this->createLogger($channel);
         }
 

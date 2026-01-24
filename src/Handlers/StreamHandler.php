@@ -39,8 +39,6 @@ use Monolog\LogRecord;
  * LIMITATIONS:
  * - Blocking I/O (use AsyncHandler for non-blocking)
  * - File locking may impact performance under high concurrency
- *
- * @package Senza1dio\EnterprisePSR3Logger\Handlers
  */
 class StreamHandler extends AbstractProcessingHandler implements HandlerInterface
 {
@@ -66,7 +64,7 @@ class StreamHandler extends AbstractProcessingHandler implements HandlerInterfac
         Level $level = Level::Debug,
         bool $bubble = true,
         ?int $filePermission = null,
-        bool $useLocking = false
+        bool $useLocking = false,
     ) {
         parent::__construct($level, $bubble);
 
@@ -111,7 +109,7 @@ class StreamHandler extends AbstractProcessingHandler implements HandlerInterfac
             }
         }
 
-        if ($this->stream === null) {
+        if ($this->stream === null || $this->formatter === null) {
             return;
         }
 
@@ -152,10 +150,11 @@ class StreamHandler extends AbstractProcessingHandler implements HandlerInterfac
         if (!str_starts_with($this->url, 'php://')) {
             $dir = dirname($this->url);
             if (!is_dir($dir)) {
-                $created = @mkdir($dir, 0755, true);
+                $created = @mkdir($dir, 0o755, true);
                 if (!$created && !is_dir($dir)) {
                     $this->streamCreationError = "Failed to create directory: {$dir}";
                     error_log("StreamHandler: {$this->streamCreationError}");
+
                     return false;
                 }
             }
@@ -164,18 +163,20 @@ class StreamHandler extends AbstractProcessingHandler implements HandlerInterfac
         // Open stream
         set_error_handler(function (int $errno, string $errstr): bool {
             $this->streamCreationError = $errstr;
+
             return true;
         });
 
         try {
-            $this->stream = fopen($this->url, 'a');
+            $opened = fopen($this->url, 'a');
+            $this->stream = $opened !== false ? $opened : null;
         } finally {
             restore_error_handler();
         }
 
-        if ($this->stream === false) {
-            $this->stream = null;
+        if ($this->stream === null) {
             error_log("StreamHandler: Failed to open {$this->url} - {$this->streamCreationError}");
+
             return false;
         }
 

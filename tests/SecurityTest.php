@@ -7,7 +7,6 @@ namespace Senza1dio\EnterprisePSR3Logger\Tests;
 use Monolog\Level;
 use Monolog\LogRecord;
 use PHPUnit\Framework\TestCase;
-use Senza1dio\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
 use Senza1dio\EnterprisePSR3Logger\Formatters\JsonFormatter;
 use Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter;
 use Senza1dio\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
@@ -20,7 +19,7 @@ class SecurityTest extends TestCase
 {
     private function createRecord(
         string $message = 'Test',
-        array $context = []
+        array $context = [],
     ): LogRecord {
         return new LogRecord(
             datetime: new \DateTimeImmutable(),
@@ -28,7 +27,7 @@ class SecurityTest extends TestCase
             level: Level::Info,
             message: $message,
             context: $context,
-            extra: []
+            extra: [],
         );
     }
 
@@ -108,7 +107,7 @@ class SecurityTest extends TestCase
     {
         $formatter = new JsonFormatter();
         $record = $this->createRecord(
-            "Message with \"quotes\" and <script>alert('xss')</script>"
+            "Message with \"quotes\" and <script>alert('xss')</script>",
         );
 
         $output = $formatter->format($record);

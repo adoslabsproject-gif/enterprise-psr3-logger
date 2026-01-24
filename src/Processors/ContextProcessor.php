@@ -30,8 +30,6 @@ use Monolog\Processor\ProcessorInterface;
  * $processor->set('user_id', $authenticatedUserId);
  * $processor->merge(['tenant_id' => $tenantId, 'org_id' => $orgId]);
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger\Processors
  */
 class ContextProcessor implements ProcessorInterface
 {
@@ -46,7 +44,7 @@ class ContextProcessor implements ProcessorInterface
      */
     public function __construct(
         array $context = [],
-        bool $addToExtra = true
+        bool $addToExtra = true,
     ) {
         $this->context = $context;
         $this->addToExtra = $addToExtra;
@@ -58,6 +56,7 @@ class ContextProcessor implements ProcessorInterface
     public function set(string $key, mixed $value): self
     {
         $this->context[$key] = $value;
+
         return $this;
     }
 
@@ -77,6 +76,7 @@ class ContextProcessor implements ProcessorInterface
     public function merge(array $context): self
     {
         $this->context = array_merge($this->context, $context);
+
         return $this;
     }
 
@@ -86,6 +86,7 @@ class ContextProcessor implements ProcessorInterface
     public function remove(string $key): self
     {
         unset($this->context[$key]);
+
         return $this;
     }
 
@@ -95,6 +96,7 @@ class ContextProcessor implements ProcessorInterface
     public function clear(): self
     {
         $this->context = [];
+
         return $this;
     }
 

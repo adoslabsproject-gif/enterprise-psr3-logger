@@ -25,8 +25,6 @@ use Psr\Log\LoggerInterface;
  * // Get default logger
  * LoggerRegistry::get()->info('Using default');
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger
  */
 final class LoggerRegistry
 {
@@ -45,7 +43,7 @@ final class LoggerRegistry
     public static function register(
         LoggerInterface $logger,
         string $channel = 'app',
-        bool $setAsDefault = false
+        bool $setAsDefault = false,
     ): void {
         self::$loggers[$channel] = $logger;
 
@@ -62,7 +60,7 @@ final class LoggerRegistry
      */
     public static function get(?string $channel = null): ?LoggerInterface
     {
-        $channel = $channel ?? self::$defaultChannel ?? 'app';
+        $channel ??= self::$defaultChannel ?? 'app';
 
         return self::$loggers[$channel] ?? null;
     }
@@ -75,7 +73,7 @@ final class LoggerRegistry
      */
     public static function has(?string $channel = null): bool
     {
-        $channel = $channel ?? self::$defaultChannel ?? 'app';
+        $channel ??= self::$defaultChannel ?? 'app';
 
         return isset(self::$loggers[$channel]);
     }

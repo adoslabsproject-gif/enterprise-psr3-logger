@@ -1,0 +1,41 @@
+<?php
+
+/**
+ * PHPStan stub for Predis (optional dependency)
+ */
+
+namespace Predis;
+
+/**
+ * @method int rPush(string $key, string ...$values)
+ * @method bool lTrim(string $key, int $start, int $stop)
+ * @method bool expire(string $key, int $seconds)
+ * @method int publish(string $channel, string $message)
+ * @method string|null get(string $key)
+ * @method bool set(string $key, string $value, string|null $expireResolution = null, int|null $expireTTL = null)
+ * @method bool setex(string $key, int $seconds, string $value)
+ * @method int del(string ...$keys)
+ * @method int incr(string $key)
+ * @method int incrby(string $key, int $increment)
+ * @method string|int xAdd(string $key, string $id, array<string, mixed> $values)
+ * @method array<mixed> xGroup(string $operation, string $key, string $group, string $id = '0', bool $mkStream = false)
+ * @method array<mixed>|null xReadGroup(string $group, string $consumer, array<string, string> $streams, int|null $count = null, int|null $block = null)
+ * @method int xAck(string $key, string $group, string ...$ids)
+ * @method array<string, mixed> xInfo(string $operation, string $key, string|null $group = null)
+ * @method int lLen(string $key)
+ */
+class Client
+{
+    /**
+     * @param mixed $parameters
+     * @param mixed $options
+     */
+    public function __construct($parameters = null, $options = null) {}
+
+    /**
+     * @param string $method
+     * @param array<mixed> $arguments
+     * @return mixed
+     */
+    public function __call(string $method, array $arguments): mixed {}
+}

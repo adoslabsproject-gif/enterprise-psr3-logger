@@ -25,8 +25,6 @@ use Monolog\Processor\ProcessorInterface;
  * // or with raw bytes:
  * $logger->addProcessor(new MemoryProcessor(formatBytes: false));
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger\Processors
  */
 class MemoryProcessor implements ProcessorInterface
 {
@@ -48,7 +46,7 @@ class MemoryProcessor implements ProcessorInterface
         bool $formatBytes = true,
         bool $includePeak = true,
         bool $includeLimit = false,
-        bool $includePercent = false
+        bool $includePercent = false,
     ) {
         $this->realUsage = $realUsage;
         $this->formatBytes = $formatBytes;

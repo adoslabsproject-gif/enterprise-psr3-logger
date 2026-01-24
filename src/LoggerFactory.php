@@ -11,7 +11,6 @@ use Senza1dio\EnterprisePSR3Logger\Formatters\PrettyFormatter;
 use Senza1dio\EnterprisePSR3Logger\Handlers\FilterHandler;
 use Senza1dio\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
 use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
-use Senza1dio\EnterprisePSR3Logger\Processors\ContextProcessor;
 use Senza1dio\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
 use Senza1dio\EnterprisePSR3Logger\Processors\HostnameProcessor;
 use Senza1dio\EnterprisePSR3Logger\Processors\MemoryProcessor;
@@ -41,8 +40,6 @@ use Senza1dio\EnterprisePSR3Logger\Processors\RequestProcessor;
  * // Container (JSON to stdout)
  * $logger = LoggerFactory::container('my-app');
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger
  */
 class LoggerFactory
 {
@@ -61,7 +58,7 @@ class LoggerFactory
      */
     public static function development(
         string $channel = 'app',
-        bool $useColors = true
+        bool $useColors = true,
     ): Logger {
         $handler = new StreamHandler('php://stdout', Level::Debug);
         $handler->setFormatter(new PrettyFormatter(useColors: $useColors));
@@ -98,7 +95,7 @@ class LoggerFactory
         string $logDir = '/var/log/app',
         Level $minLevel = Level::Info,
         int $maxFiles = 14,
-        bool $compress = true
+        bool $compress = true,
     ): Logger {
         // Main log (all levels)
         $mainHandler = new RotatingFileHandler(
@@ -106,7 +103,7 @@ class LoggerFactory
             level: $minLevel,
             rotationType: RotatingFileHandler::ROTATION_DAILY,
             maxFiles: $maxFiles,
-            compress: $compress
+            compress: $compress,
         );
         $mainHandler->setFormatter(new JsonFormatter());
 
@@ -117,9 +114,9 @@ class LoggerFactory
                 level: Level::Error,
                 rotationType: RotatingFileHandler::ROTATION_DAILY,
                 maxFiles: $maxFiles * 2, // Keep error logs longer
-                compress: $compress
+                compress: $compress,
             ),
-            minLevel: Level::Error
+            minLevel: Level::Error,
         );
         $errorHandler->getHandler()->setFormatter(new JsonFormatter());
 
@@ -149,12 +146,12 @@ class LoggerFactory
     public static function container(
         string $channel = 'app',
         Level $minLevel = Level::Info,
-        ?string $environment = null
+        ?string $environment = null,
     ): Logger {
         $handler = new StreamHandler('php://stdout', $minLevel);
         $handler->setFormatter(new JsonFormatter(
             appendNewline: true,
-            ignoreEmptyContextAndExtra: true
+            ignoreEmptyContextAndExtra: true,
         ));
 
         $logger = new Logger($channel, [$handler]);
@@ -182,7 +179,7 @@ class LoggerFactory
     public static function minimal(
         string $channel = 'app',
         string $logFile = '/var/log/app.log',
-        Level $minLevel = Level::Info
+        Level $minLevel = Level::Info,
     ): Logger {
         $handler = new StreamHandler($logFile, $minLevel, useLocking: true);
         $handler->setFormatter(new DetailedLineFormatter(multiLine: false));
@@ -207,7 +204,7 @@ class LoggerFactory
     public static function full(
         string $channel = 'app',
         string $logDir = '/var/log/app',
-        bool $alsoPrintToStdout = false
+        bool $alsoPrintToStdout = false,
     ): Logger {
         $handlers = [];
 
@@ -217,7 +214,7 @@ class LoggerFactory
             level: Level::Debug,
             rotationType: RotatingFileHandler::ROTATION_DAILY,
             maxFiles: 30,
-            compress: true
+            compress: true,
         );
         $jsonHandler->setFormatter(new JsonFormatter());
         $handlers[] = $jsonHandler;
@@ -227,7 +224,7 @@ class LoggerFactory
             filename: "{$logDir}/{$channel}.log",
             level: Level::Info,
             rotationType: RotatingFileHandler::ROTATION_DAILY,
-            maxFiles: 14
+            maxFiles: 14,
         );
         $textHandler->setFormatter(new DetailedLineFormatter());
         $handlers[] = $textHandler;
@@ -239,9 +236,9 @@ class LoggerFactory
                 level: Level::Error,
                 rotationType: RotatingFileHandler::ROTATION_DAILY,
                 maxFiles: 60,
-                compress: true
+                compress: true,
             ),
-            minLevel: Level::Error
+            minLevel: Level::Error,
         );
         $handlers[] = $errorHandler;
 
@@ -327,7 +324,7 @@ class LoggerFactory
             case 'stream':
                 $handler = new StreamHandler(
                     $config['path'] ?? 'php://stderr',
-                    $level
+                    $level,
                 );
                 break;
 
@@ -337,7 +334,7 @@ class LoggerFactory
                     level: $level,
                     rotationType: $config['rotation'] ?? RotatingFileHandler::ROTATION_DAILY,
                     maxFiles: $config['max_files'] ?? 14,
-                    compress: $config['compress'] ?? false
+                    compress: $config['compress'] ?? false,
                 );
                 break;
 
@@ -345,7 +342,7 @@ class LoggerFactory
                 $handler = new Handlers\SyslogHandler(
                     $config['ident'] ?? 'app',
                     $config['facility'] ?? LOG_USER,
-                    $level
+                    $level,
                 );
                 break;
 

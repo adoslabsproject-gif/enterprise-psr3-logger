@@ -32,8 +32,6 @@ use Monolog\LogRecord;
  * - Rotation happens on write, not on schedule
  * - Size check is approximate (checked before write)
  * - No multi-process coordination beyond file locking
- *
- * @package Senza1dio\EnterprisePSR3Logger\Handlers
  */
 class RotatingFileHandler extends AbstractProcessingHandler implements HandlerInterface
 {
@@ -72,7 +70,7 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
         int $maxFiles = 14,
         int $maxFileSize = 0,
         bool $compress = false,
-        bool $bubble = true
+        bool $bubble = true,
     ) {
         parent::__construct($level, $bubble);
 
@@ -119,6 +117,7 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
             if ($realDir === false) {
                 throw new \InvalidArgumentException("Cannot resolve directory: {$dir}");
             }
+
             return $realDir . '/' . basename($path);
         }
 
@@ -130,6 +129,7 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
             if ($normalized === null) {
                 throw new \InvalidArgumentException("Invalid path: {$path}");
             }
+
             return $normalized;
         }
 
@@ -185,7 +185,7 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
             $this->openStream($targetFile);
         }
 
-        if ($this->stream === null) {
+        if ($this->stream === null || $this->formatter === null) {
             return;
         }
 
@@ -245,6 +245,13 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
      *
      * Note: For size-based rotation in multi-process environments,
      * we check actual file size, not just tracked size.
+     *
+     * TOCTOU Warning: There's an inherent race condition between checking
+     * file size and performing rotation. In high-concurrency scenarios,
+     * multiple processes may rotate simultaneously. This is mitigated by:
+     * 1. Using file locking during writes
+     * 2. Using unique timestamp-based rotated filenames
+     * 3. Accepting that occasional over-rotation is better than data loss
      */
     private function needsRotation(string $targetFile): bool
     {
@@ -273,7 +280,10 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
     }
 
     /**
-     * Perform rotation
+     * Perform rotation with file locking to prevent race conditions
+     *
+     * Uses a lock file to coordinate between processes. Only one process
+     * will perform the rotation, others will wait and then use the new file.
      */
     private function rotate(): void
     {
@@ -283,14 +293,38 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
             $this->stream = null;
         }
 
-        // Compress old file if enabled
-        if ($this->compress && $this->currentFilename !== null && file_exists($this->currentFilename)) {
-            $this->compressFile($this->currentFilename);
-        }
+        // Use lock file for multi-process coordination
+        $lockFile = $this->baseDir . '/.rotation.lock';
+        $lockHandle = @fopen($lockFile, 'c');
 
-        // Clean up old files
-        if ($this->maxFiles > 0) {
-            $this->cleanOldFiles();
+        if ($lockHandle !== false) {
+            // Try to get exclusive lock (non-blocking)
+            if (flock($lockHandle, LOCK_EX | LOCK_NB)) {
+                try {
+                    // Double-check rotation is still needed (another process may have done it)
+                    if ($this->currentFilename !== null && file_exists($this->currentFilename)) {
+                        clearstatcache(true, $this->currentFilename);
+                        $size = @filesize($this->currentFilename);
+
+                        // Only compress if file still exists and is large enough
+                        if ($this->compress && $size !== false && $size > 0) {
+                            $this->compressFile($this->currentFilename);
+                        }
+                    }
+
+                    // Clean up old files
+                    if ($this->maxFiles > 0) {
+                        $this->cleanOldFiles();
+                    }
+                } finally {
+                    flock($lockHandle, LOCK_UN);
+                    fclose($lockHandle);
+                }
+            } else {
+                // Another process is rotating, just wait briefly and continue
+                fclose($lockHandle);
+                usleep(10000); // 10ms
+            }
         }
 
         $this->currentFilename = null;
@@ -305,14 +339,15 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
         // Ensure directory exists
         $dir = dirname($filename);
         if (!is_dir($dir)) {
-            mkdir($dir, 0755, true);
+            mkdir($dir, 0o755, true);
         }
 
-        $this->stream = fopen($filename, 'a');
+        $opened = fopen($filename, 'a');
+        $this->stream = $opened !== false ? $opened : null;
 
-        if ($this->stream === false) {
-            $this->stream = null;
+        if ($this->stream === null) {
             error_log("RotatingFileHandler: Failed to open {$filename}");
+
             return;
         }
 
@@ -331,12 +366,14 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
         $realPath = realpath($filename);
         if ($realPath === false) {
             error_log("RotatingFileHandler: Cannot compress non-existent file: {$filename}");
+
             return;
         }
 
         $realBaseDir = realpath($this->baseDir);
         if ($realBaseDir !== false && !str_starts_with($realPath, $realBaseDir)) {
             error_log("RotatingFileHandler: Refusing to compress file outside base directory: {$filename}");
+
             return;
         }
 
@@ -349,12 +386,14 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
             $source = @fopen($filename, 'rb');
             if ($source === false) {
                 error_log("RotatingFileHandler: Failed to open source file for compression: {$filename}");
+
                 return;
             }
 
             $dest = @gzopen($gzFile, 'wb9');
             if ($dest === false) {
                 error_log("RotatingFileHandler: Failed to create gzip file: {$gzFile}");
+
                 return;
             }
 
@@ -362,10 +401,12 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
                 $chunk = fread($source, 65536);
                 if ($chunk === false) {
                     error_log("RotatingFileHandler: Failed to read chunk during compression: {$filename}");
+
                     return;
                 }
                 if (gzwrite($dest, $chunk) === false) {
                     error_log("RotatingFileHandler: Failed to write gzip chunk: {$gzFile}");
+
                     return;
                 }
             }
@@ -394,15 +435,19 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
 
     /**
      * Clean up old log files
+     *
+     * Note: This matches both .log and .log.gz files. If compression is enabled,
+     * maxFiles applies to the total number of files (logs + compressed).
+     * For example, with maxFiles=14 and compression enabled, you might have
+     * a mix of recent .log files and older .log.gz files totaling 14.
      */
     private function cleanOldFiles(): void
     {
         $info = pathinfo($this->filename);
         $dir = $info['dirname'] ?? '.';
         $basename = $info['filename'] ?? 'app';
-        $extension = isset($info['extension']) ? $info['extension'] : 'log';
 
-        // Find matching files
+        // Find matching files (both .log and .log.gz)
         $pattern = "{$dir}/{$basename}-*";
         $files = glob($pattern);
 
@@ -411,7 +456,7 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
         }
 
         // Sort by modification time (oldest first)
-        usort($files, fn($a, $b) => filemtime($a) <=> filemtime($b));
+        usort($files, fn ($a, $b) => filemtime($a) <=> filemtime($b));
 
         // Delete oldest files
         $toDelete = count($files) - $this->maxFiles;

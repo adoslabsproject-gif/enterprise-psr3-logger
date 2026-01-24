@@ -33,8 +33,6 @@ use Monolog\LogRecord;
  *     destination: '/var/log/app-errors.log'
  * );
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger\Handlers
  */
 class ErrorLogHandler extends AbstractProcessingHandler implements HandlerInterface
 {
@@ -59,7 +57,7 @@ class ErrorLogHandler extends AbstractProcessingHandler implements HandlerInterf
         bool $bubble = true,
         int $messageType = self::MESSAGE_TYPE_SYSTEM,
         ?string $destination = null,
-        bool $expandNewlines = false
+        bool $expandNewlines = false,
     ) {
         parent::__construct($level, $bubble);
 
@@ -82,6 +80,9 @@ class ErrorLogHandler extends AbstractProcessingHandler implements HandlerInterf
      */
     protected function write(LogRecord $record): void
     {
+        if ($this->formatter === null) {
+            return;
+        }
         $formatted = $this->formatter->format($record);
 
         if ($this->expandNewlines) {
@@ -118,8 +119,8 @@ class ErrorLogHandler extends AbstractProcessingHandler implements HandlerInterf
     {
         // Use line formatter without newlines
         $formatter = new \Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter(
-            format: "[%datetime%] %channel%.%level_name%: %message% %context%",
-            ignoreEmptyContextAndExtra: true
+            format: '[%datetime%] %channel%.%level_name%: %message% %context%',
+            ignoreEmptyContextAndExtra: true,
         );
 
         return $formatter;

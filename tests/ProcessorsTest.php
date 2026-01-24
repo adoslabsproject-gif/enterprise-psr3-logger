@@ -23,7 +23,7 @@ class ProcessorsTest extends TestCase
             level: Level::Info,
             message: 'Test message',
             context: [],
-            extra: []
+            extra: [],
         );
     }
 
@@ -181,7 +181,19 @@ class ProcessorsTest extends TestCase
         $record = $processor($this->createRecord());
 
         $this->assertArrayHasKey('hostname', $record->extra);
+        // server_ip is only included if SERVER_ADDR is available
+        // (to avoid blocking DNS lookups)
+    }
+
+    public function testHostnameProcessorWithManualServerIp(): void
+    {
+        $processor = new HostnameProcessor();
+        $processor->setServerIp('192.168.1.1');
+        $record = $processor($this->createRecord());
+
+        $this->assertArrayHasKey('hostname', $record->extra);
         $this->assertArrayHasKey('server_ip', $record->extra);
+        $this->assertEquals('192.168.1.1', $record->extra['server_ip']);
     }
 
     public function testHostnameProcessorPhpVersion(): void
@@ -230,7 +242,7 @@ class ProcessorsTest extends TestCase
         // Should look like UUID v4
         $this->assertMatchesRegularExpression(
             '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/',
-            $id
+            $id,
         );
     }
 

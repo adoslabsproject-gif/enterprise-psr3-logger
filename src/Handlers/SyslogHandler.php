@@ -35,8 +35,6 @@ use Monolog\LogRecord;
  * - Linux: /var/log/syslog or /var/log/messages
  * - macOS: /var/log/system.log or use Console.app
  * - journalctl -t my-app (systemd)
- *
- * @package Senza1dio\EnterprisePSR3Logger\Handlers
  */
 class SyslogHandler extends AbstractProcessingHandler implements HandlerInterface
 {
@@ -69,7 +67,7 @@ class SyslogHandler extends AbstractProcessingHandler implements HandlerInterfac
         int $facility = LOG_USER,
         Level $level = Level::Debug,
         bool $bubble = true,
-        int $logopts = LOG_PID
+        int $logopts = LOG_PID,
     ) {
         parent::__construct($level, $bubble);
 
@@ -88,6 +86,9 @@ class SyslogHandler extends AbstractProcessingHandler implements HandlerInterfac
         }
 
         $priority = self::LEVEL_TO_PRIORITY[$record->level->name] ?? LOG_INFO;
+        if ($this->formatter === null) {
+            return;
+        }
         $message = $this->formatter->format($record);
 
         // Remove trailing newline for syslog
@@ -110,6 +111,14 @@ class SyslogHandler extends AbstractProcessingHandler implements HandlerInterfac
     }
 
     /**
+     * Destructor - ensure syslog connection is closed
+     */
+    public function __destruct()
+    {
+        $this->close();
+    }
+
+    /**
      * Open syslog connection
      */
     private function openSyslog(): void
@@ -126,7 +135,7 @@ class SyslogHandler extends AbstractProcessingHandler implements HandlerInterfac
         // Syslog already includes timestamp, so use simpler format
         return new \Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter(
             format: '%channel%.%level_name%: %message% %context%',
-            ignoreEmptyContextAndExtra: true
+            ignoreEmptyContextAndExtra: true,
         );
     }
 }

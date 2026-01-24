@@ -32,8 +32,6 @@ use Monolog\LogRecord;
  * - All handlers receive the record
  * - Errors in one handler don't affect others
  * - isHandling() returns true if ANY handler handles the level
- *
- * @package Senza1dio\EnterprisePSR3Logger\Handlers
  */
 class GroupHandler implements HandlerInterface
 {
@@ -48,7 +46,7 @@ class GroupHandler implements HandlerInterface
      */
     public function __construct(
         array $handlers,
-        bool $bubble = true
+        bool $bubble = true,
     ) {
         $this->handlers = $handlers;
         $this->bubble = $bubble;
@@ -60,6 +58,7 @@ class GroupHandler implements HandlerInterface
     public function addHandler(HandlerInterface $handler): self
     {
         $this->handlers[] = $handler;
+
         return $this;
     }
 
@@ -104,7 +103,7 @@ class GroupHandler implements HandlerInterface
                     $handled = true;
                 } catch (\Throwable $e) {
                     // Log error but continue to other handlers
-                    error_log("GroupHandler: Handler failed - " . $e->getMessage());
+                    error_log('GroupHandler: Handler failed - ' . $e->getMessage());
                 }
             }
         }
@@ -127,7 +126,7 @@ class GroupHandler implements HandlerInterface
             try {
                 $handler->handleBatch($records);
             } catch (\Throwable $e) {
-                error_log("GroupHandler: Handler batch failed - " . $e->getMessage());
+                error_log('GroupHandler: Handler batch failed - ' . $e->getMessage());
             }
         }
     }
@@ -141,7 +140,7 @@ class GroupHandler implements HandlerInterface
             try {
                 $handler->close();
             } catch (\Throwable $e) {
-                error_log("GroupHandler: Handler close failed - " . $e->getMessage());
+                error_log('GroupHandler: Handler close failed - ' . $e->getMessage());
             }
         }
     }

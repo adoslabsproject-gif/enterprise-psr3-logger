@@ -35,8 +35,6 @@ use Monolog\LogRecord;
  * - %extra_kv%    - Extra data as key=value pairs
  * - %pid%         - Process ID
  * - %memory%      - Memory usage
- *
- * @package Senza1dio\EnterprisePSR3Logger\Formatters
  */
 class LineFormatter extends NormalizerFormatter implements FormatterInterface
 {
@@ -70,7 +68,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
         ?string $dateFormat = null,
         bool $allowInlineLineBreaks = false,
         bool $ignoreEmptyContextAndExtra = false,
-        bool $includeStacktraces = true
+        bool $includeStacktraces = true,
     ) {
         parent::__construct($dateFormat ?? 'Y-m-d H:i:s');
 
@@ -89,6 +87,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
     public function setMaxContextLength(int $length): self
     {
         $this->maxContextLength = max(0, $length);
+
         return $this;
     }
 
@@ -101,6 +100,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
     public function setIncludeProcessId(bool $include): self
     {
         $this->includeProcessId = $include;
+
         return $this;
     }
 
@@ -113,6 +113,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
     public function setIncludeMemoryUsage(bool $include): self
     {
         $this->includeMemoryUsage = $include;
+
         return $this;
     }
 
@@ -125,6 +126,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
     {
         $this->format = self::ENHANCED_FORMAT;
         $this->ignoreEmptyContextAndExtra = true;
+
         return $this;
     }
 
@@ -157,7 +159,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
                 $contextJson = substr($contextJson, 0, $this->maxContextLength) . '...';
             }
             $vars['%context%'] = $contextJson;
-            $vars['%context_kv%'] = $this->toKeyValue($context);
+            $vars['%context_kv%'] = is_array($context) ? $this->toKeyValue($context) : '';
         }
 
         // Extra as JSON
@@ -167,7 +169,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
             $vars['%extra_kv%'] = '';
         } else {
             $vars['%extra%'] = $this->toJson($extra);
-            $vars['%extra_kv%'] = $this->toKeyValue($extra);
+            $vars['%extra_kv%'] = is_array($extra) ? $this->toKeyValue($extra) : '';
         }
 
         $output = strtr($this->format, $vars);
@@ -247,6 +249,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
             if ($ignoreErrors) {
                 return '[]';
             }
+
             return parent::toJson($data, true);
         }
 
@@ -305,13 +308,16 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
             // Escape quotes and handle strings with spaces
             if (str_contains($value, ' ') || str_contains($value, '=') || str_contains($value, '"')) {
                 $value = str_replace('"', '\\"', $value);
+
                 return '"' . $value . '"';
             }
+
             return $value;
         }
 
         if (is_array($value)) {
             $json = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
             return $json !== false ? $json : '[array]';
         }
 
@@ -319,6 +325,7 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
             if ($value instanceof \DateTimeInterface) {
                 return $value->format('Y-m-d\TH:i:s');
             }
+
             return '[' . get_class($value) . ']';
         }
 

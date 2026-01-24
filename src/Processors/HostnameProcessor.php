@@ -26,8 +26,6 @@ use Monolog\Processor\ProcessorInterface;
  * // With environment
  * $logger->addProcessor(new HostnameProcessor(environment: 'production'));
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger\Processors
  */
 class HostnameProcessor implements ProcessorInterface
 {
@@ -42,7 +40,7 @@ class HostnameProcessor implements ProcessorInterface
      */
     public function __construct(
         bool $includePhpVersion = false,
-        ?string $environment = null
+        ?string $environment = null,
     ) {
         $this->includePhpVersion = $includePhpVersion;
         $this->environment = $environment ?? getenv('APP_ENV') ?: null;
@@ -62,12 +60,15 @@ class HostnameProcessor implements ProcessorInterface
         $extra['hostname'] = $this->hostname;
 
         // Server IP (cached)
+        // Note: We avoid gethostbyname() as it can cause blocking DNS lookups
+        // which would impact logging performance. If SERVER_ADDR is not
+        // available, we simply don't include the server IP.
         if ($this->serverIp === null) {
-            $this->serverIp = $_SERVER['SERVER_ADDR']
-                ?? gethostbyname($this->hostname)
-                ?? 'unknown';
+            $this->serverIp = $_SERVER['SERVER_ADDR'] ?? null;
         }
-        $extra['server_ip'] = $this->serverIp;
+        if ($this->serverIp !== null) {
+            $extra['server_ip'] = $this->serverIp;
+        }
 
         // PHP version
         if ($this->includePhpVersion) {
@@ -80,5 +81,18 @@ class HostnameProcessor implements ProcessorInterface
         }
 
         return $record->with(extra: $extra);
+    }
+
+    /**
+     * Manually set server IP (useful for CLI or when SERVER_ADDR is unavailable)
+     *
+     * @param string $ip Server IP address
+     * @return self
+     */
+    public function setServerIp(string $ip): self
+    {
+        $this->serverIp = $ip;
+
+        return $this;
     }
 }

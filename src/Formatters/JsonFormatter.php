@@ -31,8 +31,6 @@ use Monolog\LogRecord;
  *   }
  * }
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger\Formatters
  */
 class JsonFormatter extends NormalizerFormatter implements FormatterInterface
 {
@@ -63,7 +61,7 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
         int $batchMode = self::BATCH_MODE_NEWLINES,
         bool $appendNewline = true,
         bool $ignoreEmptyContextAndExtra = false,
-        bool $includeStacktraces = true
+        bool $includeStacktraces = true,
     ) {
         parent::__construct(\DateTimeInterface::RFC3339_EXTENDED);
 
@@ -85,6 +83,7 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
     public function setJsonFlags(int $flags): self
     {
         $this->jsonFlags = $flags;
+
         return $this;
     }
 
@@ -97,6 +96,7 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
     public function setIncludeFields(array $fields): self
     {
         $this->includeFields = $fields;
+
         return $this;
     }
 
@@ -109,6 +109,7 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
     public function setExcludeFields(array $fields): self
     {
         $this->excludeFields = $fields;
+
         return $this;
     }
 
@@ -163,9 +164,9 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
             'message' => $record->message,
         ];
 
-        // Context
+        // Context - use custom normalization for exceptions
         if (!empty($record->context) || !$this->ignoreEmptyContextAndExtra) {
-            $data['context'] = $this->normalize($record->context);
+            $data['context'] = $this->normalizeContext($record->context);
         }
 
         // Extra
@@ -177,6 +178,91 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
         $data = $this->filterFields($data);
 
         return $data;
+    }
+
+    /**
+     * Normalize context with special handling for exceptions
+     *
+     * @param array<string, mixed> $context
+     * @return array<string, mixed>
+     */
+    protected function normalizeContext(array $context): array
+    {
+        $normalized = [];
+
+        foreach ($context as $key => $value) {
+            if ($value instanceof \Throwable) {
+                $normalized[$key] = $this->normalizeException($value);
+            } else {
+                $normalized[$key] = $this->normalize($value);
+            }
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Normalize an exception with full details including previous exceptions
+     *
+     * @return array<string, mixed>
+     */
+    protected function normalizeException(\Throwable $exception, int $depth = 0): array
+    {
+        // Prevent infinite recursion
+        if ($depth > 10) {
+            return ['class' => get_class($exception), 'message' => '[max depth reached]'];
+        }
+
+        $data = [
+            'class' => get_class($exception),
+            'message' => $exception->getMessage(),
+            'code' => $exception->getCode(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+        ];
+
+        // Include stack trace if enabled
+        if ($this->includeStacktraces) {
+            $data['trace'] = $this->formatTrace($exception->getTrace());
+        }
+
+        // Include previous exception (chained exceptions)
+        $previous = $exception->getPrevious();
+        if ($previous !== null) {
+            $data['previous'] = $this->normalizeException($previous, $depth + 1);
+        }
+
+        return $data;
+    }
+
+    /**
+     * Format stack trace for JSON output
+     *
+     * @param array<int, array<string, mixed>> $trace
+     * @return array<int, string>
+     */
+    protected function formatTrace(array $trace): array
+    {
+        $formatted = [];
+
+        foreach ($trace as $frame) {
+            $file = $frame['file'] ?? '[internal]';
+            $line = $frame['line'] ?? 0;
+            $class = $frame['class'] ?? '';
+            $type = $frame['type'] ?? '';
+            $function = $frame['function'] ?? '';
+
+            $call = $class . $type . $function . '()';
+            $formatted[] = "{$file}:{$line} {$call}";
+
+            // Limit to 20 frames to avoid huge logs
+            if (count($formatted) >= 20) {
+                $formatted[] = '... (truncated)';
+                break;
+            }
+        }
+
+        return $formatted;
     }
 
     /**
@@ -217,6 +303,7 @@ class JsonFormatter extends NormalizerFormatter implements FormatterInterface
             }
             // Fallback for encoding errors
             $error = json_last_error_msg();
+
             return json_encode([
                 'json_encode_error' => $error,
                 'data_type' => gettype($data),

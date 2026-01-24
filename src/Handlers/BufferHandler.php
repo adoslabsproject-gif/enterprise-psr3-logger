@@ -43,8 +43,6 @@ use Monolog\LogRecord;
  * CONDITIONAL LOGGING:
  * Set flushOnlyOnError to discard debug/info logs unless an error occurs.
  * Useful for reducing log volume while retaining context on errors.
- *
- * @package Senza1dio\EnterprisePSR3Logger\Handlers
  */
 class BufferHandler implements HandlerInterface
 {
@@ -59,6 +57,15 @@ class BufferHandler implements HandlerInterface
     private array $buffer = [];
 
     private bool $initialized = false;
+
+    /** @var bool Flag to prevent double close */
+    private bool $closed = false;
+
+    /** @var int Count of consecutive flush failures */
+    private int $consecutiveFailures = 0;
+
+    /** @var int Max consecutive failures before force-clearing buffer */
+    private const MAX_CONSECUTIVE_FAILURES = 3;
 
     /**
      * @param HandlerInterface $handler Handler to forward buffered records to
@@ -76,7 +83,7 @@ class BufferHandler implements HandlerInterface
         bool $flushOnError = false,
         bool $flushOnlyOnError = false,
         Level $flushLevel = Level::Error,
-        bool $flushOnShutdown = true
+        bool $flushOnShutdown = true,
     ) {
         $this->handler = $handler;
         $this->bufferLimit = max(0, $bufferLimit);
@@ -138,7 +145,7 @@ class BufferHandler implements HandlerInterface
      */
     public function flush(): void
     {
-        if (empty($this->buffer)) {
+        if (empty($this->buffer) || $this->closed) {
             return;
         }
 
@@ -154,22 +161,41 @@ class BufferHandler implements HandlerInterface
 
             if (!$hasError) {
                 $this->clear();
+
                 return;
             }
         }
 
         // Flush to wrapped handler
-        try {
-            if (count($this->buffer) === 1) {
-                $this->handler->handle($this->buffer[0]);
-            } else {
-                $this->handler->handleBatch($this->buffer);
-            }
-        } catch (\Throwable $e) {
-            error_log("BufferHandler: Flush failed - " . $e->getMessage());
-        }
+        // Keep a copy in case of failure for potential retry/recovery
+        $recordsToFlush = $this->buffer;
 
-        $this->clear();
+        try {
+            if (count($recordsToFlush) === 1) {
+                $this->handler->handle($recordsToFlush[0]);
+            } else {
+                $this->handler->handleBatch($recordsToFlush);
+            }
+            // Only clear on success
+            $this->clear();
+            $this->consecutiveFailures = 0;
+        } catch (\Throwable $e) {
+            $this->consecutiveFailures++;
+
+            // Log failure
+            error_log("BufferHandler: Flush failed (attempt {$this->consecutiveFailures}) - " . $e->getMessage());
+
+            // If too many consecutive failures, force clear to prevent infinite loop
+            if ($this->consecutiveFailures >= self::MAX_CONSECUTIVE_FAILURES) {
+                error_log('BufferHandler: Too many consecutive failures, discarding ' . count($this->buffer) . ' records');
+                $this->clear();
+                $this->consecutiveFailures = 0;
+            } elseif (count($this->buffer) > 10000) {
+                // Also clear if buffer is huge to prevent memory exhaustion
+                error_log('BufferHandler: Buffer overflow, discarding ' . count($this->buffer) . ' records');
+                $this->clear();
+            }
+        }
     }
 
     /**
@@ -200,15 +226,35 @@ class BufferHandler implements HandlerInterface
 
     /**
      * {@inheritdoc}
+     *
+     * Protected against double-close which can happen when:
+     * 1. User calls $handler->close() manually
+     * 2. Shutdown handler also calls close()
      */
     public function close(): void
     {
+        if ($this->closed) {
+            return;
+        }
+
+        $this->closed = true;
         $this->flush();
         $this->handler->close();
     }
 
     /**
+     * Check if handler is closed
+     */
+    public function isClosed(): bool
+    {
+        return $this->closed;
+    }
+
+    /**
      * Register shutdown handler
+     *
+     * Uses WeakReference to avoid preventing garbage collection
+     * if the handler is destroyed before shutdown.
      */
     private function registerShutdownHandler(): void
     {
@@ -218,8 +264,14 @@ class BufferHandler implements HandlerInterface
 
         $this->initialized = true;
 
-        register_shutdown_function(function (): void {
-            $this->close();
+        // Use WeakReference to avoid preventing GC
+        $weakSelf = \WeakReference::create($this);
+
+        register_shutdown_function(static function () use ($weakSelf): void {
+            $self = $weakSelf->get();
+            if ($self !== null && !$self->isClosed()) {
+                $self->close();
+            }
         });
     }
 }

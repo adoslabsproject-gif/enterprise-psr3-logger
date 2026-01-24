@@ -28,8 +28,6 @@ use Monolog\Processor\ProcessorInterface;
  * // ... code ...
  * $logger->info('Operation completed'); // Will include time since start()
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger\Processors
  */
 class ExecutionTimeProcessor implements ProcessorInterface
 {
@@ -42,7 +40,7 @@ class ExecutionTimeProcessor implements ProcessorInterface
      */
     public function __construct(
         ?float $startTime = null,
-        bool $includeFormatted = true
+        bool $includeFormatted = true,
     ) {
         $this->startTime = $startTime
             ?? $_SERVER['REQUEST_TIME_FLOAT']
@@ -56,6 +54,7 @@ class ExecutionTimeProcessor implements ProcessorInterface
     public function start(): self
     {
         $this->startTime = microtime(true);
+
         return $this;
     }
 
@@ -89,8 +88,9 @@ class ExecutionTimeProcessor implements ProcessorInterface
      */
     private function formatTime(float $ms): string
     {
+        // Note: Using 'us' instead of the Greek letter mu (μ) for ASCII compatibility
         if ($ms < 1) {
-            return round($ms * 1000, 2) . 'μs';
+            return round($ms * 1000, 2) . 'us';
         }
 
         if ($ms < 1000) {

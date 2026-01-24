@@ -49,8 +49,6 @@ use Monolog\LogRecord;
  *     maxLevel: Level::Debug
  * ));
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger\Handlers
  */
 class FilterHandler implements HandlerInterface
 {
@@ -75,7 +73,7 @@ class FilterHandler implements HandlerInterface
         Level $minLevel = Level::Debug,
         ?Level $maxLevel = null,
         ?callable $filter = null,
-        bool $bubble = true
+        bool $bubble = true,
     ) {
         $this->handler = $handler;
         $this->minLevel = $minLevel;
@@ -94,14 +92,27 @@ class FilterHandler implements HandlerInterface
 
     /**
      * {@inheritdoc}
+     *
+     * Bubble semantics:
+     * - If filter doesn't match: always bubble (return true) to let other handlers process
+     * - If filter matches: delegate to wrapped handler, then respect $bubble setting
+     *
+     * This ensures filtered-out records can still be processed by other handlers
+     * in the chain, while matched records follow the configured bubble behavior.
      */
     public function handle(LogRecord $record): bool
     {
         if (!$this->shouldHandle($record)) {
-            return $this->bubble;
+            // Record doesn't match our filter - always let it bubble
+            // so other handlers in the chain can process it
+            return true;
         }
 
-        return $this->handler->handle($record);
+        // Record matches - delegate to wrapped handler
+        $this->handler->handle($record);
+
+        // Return our bubble setting (controls whether record continues to next handler)
+        return $this->bubble;
     }
 
     /**
@@ -109,7 +120,7 @@ class FilterHandler implements HandlerInterface
      */
     public function handleBatch(array $records): void
     {
-        $filtered = array_filter($records, fn(LogRecord $record) => $this->shouldHandle($record));
+        $filtered = array_filter($records, fn (LogRecord $record) => $this->shouldHandle($record));
 
         if (!empty($filtered)) {
             $this->handler->handleBatch(array_values($filtered));

@@ -7,8 +7,6 @@ declare(strict_types=1);
  *
  * Convenience functions for quick logging access.
  * These are optional - you can use the Logger class directly.
- *
- * @package Senza1dio\EnterprisePSR3Logger
  */
 
 namespace Senza1dio\EnterprisePSR3Logger;
@@ -119,7 +117,7 @@ if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_exception')) {
         \Throwable $exception,
         string $message = 'Exception occurred',
         array $context = [],
-        ?string $channel = null
+        ?string $channel = null,
     ): void {
         $context['exception'] = $exception;
 

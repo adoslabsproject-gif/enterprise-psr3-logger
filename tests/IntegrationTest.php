@@ -9,14 +9,13 @@ use Monolog\Level;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
+use Senza1dio\EnterprisePSR3Logger\Formatters\JsonFormatter;
+use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
 use Senza1dio\EnterprisePSR3Logger\Logger;
 use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
 use Senza1dio\EnterprisePSR3Logger\LoggerManager;
 use Senza1dio\EnterprisePSR3Logger\LoggerRegistry;
-use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
-use Senza1dio\EnterprisePSR3Logger\Formatters\JsonFormatter;
 use Senza1dio\EnterprisePSR3Logger\Processors\RequestProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\ContextProcessor;
 
 /**
  * Integration tests simulating real-world usage patterns
@@ -29,7 +28,7 @@ class IntegrationTest extends TestCase
     protected function setUp(): void
     {
         $this->tempDir = sys_get_temp_dir() . '/psr3-integration-' . uniqid();
-        mkdir($this->tempDir, 0755, true);
+        mkdir($this->tempDir, 0o755, true);
         LoggerRegistry::clear();
     }
 
@@ -310,7 +309,7 @@ class IntegrationTest extends TestCase
         $logger = LoggerFactory::production(
             channel: 'prod-app',
             logDir: $this->tempDir,
-            compress: false
+            compress: false,
         );
 
         $logger->info('Production log entry');

@@ -124,16 +124,35 @@ $logger->info('Hello world');
 | `FilterHandler` | Route logs by level range |
 | `GroupHandler` | Send to multiple handlers |
 | `BufferHandler` | Buffer logs and flush in batches |
+| `AsyncHandler` | Async logging (shutdown, fork, fastcgi strategies) |
+| `DatabaseHandler` | Write logs to database (MySQL, PostgreSQL, SQLite) |
+| `RedisHandler` | Write logs to Redis (list, pubsub, stream strategies) |
+| `WebhookHandler` | Send logs to webhooks (Slack, Discord, Teams, custom) |
 
 ### Processors
 
 | Processor | Added Fields |
 |-----------|--------------|
-| `RequestProcessor` | request_id, http_method, url, ip, user_agent |
-| `MemoryProcessor` | memory_usage, memory_peak |
-| `ExecutionTimeProcessor` | execution_time_ms |
-| `HostnameProcessor` | hostname, server_ip, environment |
+| `RequestProcessor` | request_id, http_method, url, ip, user_agent, referrer |
+| `MemoryProcessor` | memory_usage, memory_peak, memory_percent |
+| `ExecutionTimeProcessor` | execution_time_us (microseconds) |
+| `HostnameProcessor` | hostname, environment, php_version |
 | `ContextProcessor` | Custom static fields |
+
+**RequestProcessor Security:**
+```php
+// Default: Only REMOTE_ADDR (safe for direct connections)
+$processor = new RequestProcessor();
+
+// Behind trusted proxy: enable X-Forwarded-For
+$processor = new RequestProcessor(
+    trustProxyHeaders: true,
+    trustedProxyHeaders: ['HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'REMOTE_ADDR']
+);
+
+// Anonymize IP addresses (GDPR compliance)
+$processor = new RequestProcessor(anonymizeIp: true);
+```
 
 ## Multi-Channel Logging
 
@@ -221,6 +240,97 @@ $debugHandler = new FilterHandler(
 $logger = new Logger('app', [$errorHandler, $infoHandler, $debugHandler]);
 ```
 
+## Database Logging
+
+```php
+use Senza1dio\EnterprisePSR3Logger\Handlers\DatabaseHandler;
+
+$pdo = new PDO('mysql:host=localhost;dbname=app', 'user', 'pass');
+
+// Create table (run once)
+DatabaseHandler::createTable($pdo, 'logs', 'mysql');
+
+// Use handler
+$handler = new DatabaseHandler($pdo, 'logs', batchSize: 50);
+$logger->addHandler($handler);
+
+// Query logs later
+$logs = DatabaseHandler::query($pdo, [
+    'channel' => 'app',
+    'min_level' => 400, // Error and above
+    'from' => '2024-01-01',
+    'limit' => 100,
+]);
+```
+
+## Redis Logging
+
+```php
+use Senza1dio\EnterprisePSR3Logger\Handlers\RedisHandler;
+
+$redis = new \Redis();
+$redis->connect('127.0.0.1', 6379);
+
+// List-based (for processing queues)
+$handler = new RedisHandler($redis, 'logs:app');
+
+// Stream-based (for log aggregation with consumer groups)
+$handler = new RedisHandler($redis, 'logs:app', strategy: 'stream', maxLength: 10000);
+
+// Pub/Sub (for real-time monitoring)
+$handler = new RedisHandler($redis, 'logs:app', strategy: 'pubsub');
+```
+
+## Webhook Alerting
+
+```php
+use Senza1dio\EnterprisePSR3Logger\Handlers\WebhookHandler;
+use Monolog\Level;
+
+// Slack
+$slackHandler = WebhookHandler::slack(
+    webhookUrl: 'https://hooks.slack.com/services/xxx/yyy/zzz',
+    channel: '#alerts',
+    username: 'Logger Bot',
+    level: Level::Error
+);
+
+// Discord
+$discordHandler = WebhookHandler::discord(
+    webhookUrl: 'https://discord.com/api/webhooks/xxx/yyy',
+    username: 'Logger Bot'
+);
+
+// Microsoft Teams
+$teamsHandler = WebhookHandler::teams(
+    webhookUrl: 'https://outlook.office.com/webhook/xxx',
+    title: 'Production Alerts'
+);
+
+// Custom webhook
+$customHandler = new WebhookHandler(
+    url: 'https://api.example.com/logs',
+    headers: ['Authorization' => 'Bearer token']
+);
+```
+
+## Async Logging
+
+```php
+use Senza1dio\EnterprisePSR3Logger\Handlers\AsyncHandler;
+
+// Wrap any slow handler with AsyncHandler
+$dbHandler = new DatabaseHandler($pdo);
+$asyncHandler = new AsyncHandler($dbHandler, strategy: 'shutdown');
+
+// Strategies:
+// - 'shutdown': Write after response sent (default, safest)
+// - 'fastcgi': Use fastcgi_finish_request() then write (PHP-FPM)
+// - 'fork': Fork child process (requires pcntl, resource inheritance warning)
+
+$logger->addHandler($asyncHandler);
+```
+
 ## Configuration from Array
 
 ```php
@@ -273,27 +383,38 @@ This package has the following limitations:
    - Rotation happens on write, not on schedule
    - Size check uses actual file size (multi-process safe) but has I/O overhead
    - Compression runs synchronously (blocks during gzip)
+   - Multi-process rotation uses lock file (brief blocking possible)
 
 2. **Performance**
-   - Synchronous I/O (blocking writes)
+   - Default handlers use synchronous I/O (blocking writes)
    - File locking may impact high-concurrency scenarios
-   - No async/non-blocking option
+   - AsyncHandler available for non-blocking writes (fork/shutdown/fastcgi strategies)
 
 3. **Memory**
-   - Context data is not size-limited by default (use setMaxContextLength)
+   - Context data depth is limited by `setMaxContextDepth()` (default: 10 levels)
    - Large contexts can cause memory issues
-   - BufferHandler can consume memory if not flushed
+   - BufferHandler limits consecutive failures to prevent memory exhaustion
 
-4. **Not Included**
-   - Email/Slack/external service handlers
-   - Log forwarding to remote servers
-   - Log search/query capabilities
-   - Log encryption
+4. **AsyncHandler Caveats**
+   - fork strategy requires pcntl extension
+   - fork strategy inherits parent resources (DB connections, sockets)
+   - shutdown strategy blocks after response (but after output sent)
+   - Logs may be lost if PHP crashes before shutdown
 
-5. **Sampling**
+5. **WebhookHandler**
+   - Synchronous HTTP requests (blocking)
+   - Recommend wrapping with AsyncHandler for production
+   - Uses file_get_contents (no curl dependency)
+
+6. **Sampling**
    - Random-based, not deterministic
    - Same request may have some logs sampled out
    - No request-level sampling (all or nothing per request)
+
+7. **Security Considerations**
+   - RequestProcessor defaults to REMOTE_ADDR only (safe)
+   - Proxy headers (X-Forwarded-For) must be explicitly enabled
+   - File handlers validate paths against directory traversal
 
 ## Security Features
 
@@ -301,6 +422,10 @@ This package has the following limitations:
 - **Null byte injection protection**: Paths are validated for null bytes
 - **Log injection protection**: Newlines, ANSI sequences, and control characters are sanitized
 - **Exception serialization**: Exceptions are serialized to arrays, not stored as objects
+- **IP spoofing protection**: RequestProcessor defaults to REMOTE_ADDR only; proxy headers require explicit opt-in
+- **Circular reference detection**: Context sanitization detects and handles object cycles
+- **SQL injection protection**: DatabaseHandler validates table names and uses prepared statements
+- **Chained exception support**: Previous exceptions are normalized recursively (with depth limit)
 
 ## Framework Compatibility
 
@@ -316,21 +441,23 @@ Tested compatible with:
 ### What Makes It Enterprise-Ready
 
 1. **PSR-3 compliance** - Standard interface, works everywhere
-2. **Security hardened** - Path traversal, log injection protection
-3. **Multi-channel architecture** - Separation of concerns
-4. **Context enrichment** - Request ID, memory, timing automatically added
-5. **Log rotation** - Production-ready file management
-6. **Error resilience** - Handlers continue if one fails
-7. **134 passing tests** - Including security and integration tests
+2. **Security hardened** - Path traversal, log injection, IP spoofing protection
+3. **Multi-channel architecture** - Separation of concerns with inheritance
+4. **Context enrichment** - Request ID, memory, timing, hostname automatically added
+5. **Log rotation** - Multi-process safe with file locking
+6. **Error resilience** - Handlers continue if one fails, consecutive failure protection
+7. **Multiple backends** - File, database (MySQL/PostgreSQL/SQLite), Redis, webhooks
+8. **Async support** - AsyncHandler with fork/shutdown/fastcgi strategies
+9. **Alerting** - WebhookHandler with Slack/Discord/Teams integration
+10. **169 passing tests** - Including security, integration, and real file I/O tests
 
 ### What It Lacks for Full Enterprise
 
 1. **No distributed tracing** - No OpenTelemetry/Jaeger integration
-2. **No log aggregation** - No built-in ELK/Loki/Datadog clients
+2. **No log aggregation** - No built-in ELK/Loki/Datadog clients (but JSON format is compatible)
 3. **No encryption at rest** - Logs are plaintext
-4. **No async I/O** - All writes are blocking
-5. **No alerting** - No Slack/PagerDuty/email integration
-6. **Limited field testing** - No production battle-testing yet
+4. **No email handler** - Use external service or SMTP library
+5. **Limited field testing** - Not battle-tested in high-traffic production yet
 
 ### Verdict
 
@@ -342,10 +469,17 @@ This package is **suitable for production use** in most PHP applications. It pro
 
 ## Requirements
 
+**Required:**
 - PHP 8.0+
 - ext-json
+- ext-pdo (for DatabaseHandler)
 - monolog/monolog ^3.0
 - psr/log ^3.0
+
+**Optional:**
+- ext-redis (for RedisHandler with phpredis)
+- ext-pcntl (for AsyncHandler fork strategy)
+- predis/predis (alternative Redis client)
 
 ## License
 

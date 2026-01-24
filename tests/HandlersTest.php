@@ -20,7 +20,7 @@ class HandlersTest extends TestCase
     protected function setUp(): void
     {
         $this->tempDir = sys_get_temp_dir() . '/psr3-logger-test-' . uniqid();
-        mkdir($this->tempDir, 0755, true);
+        mkdir($this->tempDir, 0o755, true);
     }
 
     protected function tearDown(): void
@@ -37,7 +37,7 @@ class HandlersTest extends TestCase
 
     private function createRecord(
         string $message = 'Test message',
-        Level $level = Level::Info
+        Level $level = Level::Info,
     ): LogRecord {
         return new LogRecord(
             datetime: new \DateTimeImmutable(),
@@ -45,7 +45,7 @@ class HandlersTest extends TestCase
             level: $level,
             message: $message,
             context: [],
-            extra: []
+            extra: [],
         );
     }
 
@@ -106,7 +106,7 @@ class HandlersTest extends TestCase
         $file = $this->tempDir . '/rotating.log';
         $handler = new RotatingFileHandler(
             filename: $file,
-            rotationType: RotatingFileHandler::ROTATION_NONE
+            rotationType: RotatingFileHandler::ROTATION_NONE,
         );
 
         $handler->handle($this->createRecord());
@@ -120,7 +120,7 @@ class HandlersTest extends TestCase
         $file = $this->tempDir . '/daily.log';
         $handler = new RotatingFileHandler(
             filename: $file,
-            rotationType: RotatingFileHandler::ROTATION_DAILY
+            rotationType: RotatingFileHandler::ROTATION_DAILY,
         );
 
         $handler->handle($this->createRecord());
@@ -172,7 +172,7 @@ class HandlersTest extends TestCase
         $handler = new FilterHandler(
             $innerHandler,
             minLevel: Level::Info,
-            maxLevel: Level::Warning
+            maxLevel: Level::Warning,
         );
 
         $handler->handle($this->createRecord('Debug', Level::Debug));
@@ -195,7 +195,7 @@ class HandlersTest extends TestCase
         $innerHandler = new StreamHandler($file);
         $handler = new FilterHandler(
             $innerHandler,
-            filter: fn(LogRecord $r) => str_contains($r->message, 'important')
+            filter: fn (LogRecord $r) => str_contains($r->message, 'important'),
         );
 
         $handler->handle($this->createRecord('Normal message'));
@@ -281,7 +281,7 @@ class HandlersTest extends TestCase
             $innerHandler,
             bufferLimit: 3,
             flushOnOverflow: true,
-            flushOnShutdown: false
+            flushOnShutdown: false,
         );
 
         $handler->handle($this->createRecord('One'));
@@ -301,7 +301,7 @@ class HandlersTest extends TestCase
         $handler = new BufferHandler(
             $innerHandler,
             flushOnError: true,
-            flushOnShutdown: false
+            flushOnShutdown: false,
         );
 
         $handler->handle($this->createRecord('Info', Level::Info));

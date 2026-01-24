@@ -34,8 +34,6 @@ use Stringable;
  * - Not thread-safe (PHP is single-threaded per request anyway)
  * - File handlers block during write (use async handler for high throughput)
  * - Context size not limited (large contexts can cause memory issues)
- *
- * @package Senza1dio\EnterprisePSR3Logger
  */
 class Logger implements LoggerInterface
 {
@@ -60,12 +58,12 @@ class Logger implements LoggerInterface
     /**
      * @param string $channel Channel name (e.g., 'app', 'security', 'audit')
      * @param array<HandlerInterface> $handlers Initial handlers
-     * @param array<ProcessorInterface> $processors Initial processors
+     * @param array<ProcessorInterface|callable(LogRecord): LogRecord> $processors Initial processors
      */
     public function __construct(
         string $channel = 'app',
         array $handlers = [],
-        array $processors = []
+        array $processors = [],
     ) {
         $this->channel = $channel;
         $this->monolog = new MonologLogger($channel, $handlers, $processors);
@@ -98,6 +96,7 @@ class Logger implements LoggerInterface
     public function addHandler(HandlerInterface $handler): self
     {
         $this->monolog->pushHandler($handler);
+
         return $this;
     }
 
@@ -110,6 +109,7 @@ class Logger implements LoggerInterface
     public function addProcessor(ProcessorInterface|callable $processor): self
     {
         $this->monolog->pushProcessor($processor);
+
         return $this;
     }
 
@@ -122,6 +122,7 @@ class Logger implements LoggerInterface
     public function setGlobalContext(array $context): self
     {
         $this->globalContext = $context;
+
         return $this;
     }
 
@@ -135,6 +136,7 @@ class Logger implements LoggerInterface
     public function addGlobalContext(string $key, mixed $value): self
     {
         $this->globalContext[$key] = $value;
+
         return $this;
     }
 
@@ -147,6 +149,7 @@ class Logger implements LoggerInterface
     public function setSamplingRate(float $rate): self
     {
         $this->samplingRate = max(0.0, min(1.0, $rate));
+
         return $this;
     }
 
@@ -160,6 +163,7 @@ class Logger implements LoggerInterface
     public function setLevelSamplingRate(string $level, float $rate): self
     {
         $this->levelSamplingRates[$level] = max(0.0, min(1.0, $rate));
+
         return $this;
     }
 
@@ -172,6 +176,7 @@ class Logger implements LoggerInterface
     public function setIncludeStackTraces(bool $include): self
     {
         $this->includeStackTraces = $include;
+
         return $this;
     }
 
@@ -184,6 +189,7 @@ class Logger implements LoggerInterface
     public function setMaxContextDepth(int $depth): self
     {
         $this->maxContextDepth = max(1, $depth);
+
         return $this;
     }
 
@@ -259,13 +265,33 @@ class Logger implements LoggerInterface
     /**
      * Create a child logger with additional context
      *
+     * Note: This creates a NEW Monolog instance with the same handlers/processors
+     * to avoid shared state issues. Modifications to the child's handlers/processors
+     * will not affect the parent.
+     *
      * @param array<string, mixed> $context Additional context for child
      * @return self
      */
     public function withContext(array $context): self
     {
-        $child = clone $this;
+        // Create new Logger with new Monolog instance (not a shallow clone)
+        $child = new self($this->channel);
+
+        // Copy handlers and processors to new Monolog instance
+        foreach ($this->monolog->getHandlers() as $handler) {
+            $child->monolog->pushHandler($handler);
+        }
+        foreach ($this->monolog->getProcessors() as $processor) {
+            $child->monolog->pushProcessor($processor);
+        }
+
+        // Copy settings
         $child->globalContext = array_merge($this->globalContext, $context);
+        $child->samplingRate = $this->samplingRate;
+        $child->levelSamplingRates = $this->levelSamplingRates;
+        $child->includeStackTraces = $this->includeStackTraces;
+        $child->maxContextDepth = $this->maxContextDepth;
+
         return $child;
     }
 
@@ -367,37 +393,98 @@ class Logger implements LoggerInterface
     }
 
     /**
+     * Normalize an exception with chained previous exceptions
+     *
+     * @param \Throwable $exception
+     * @param int $depth Current recursion depth
+     * @return array<string, mixed>
+     */
+    private function normalizeException(\Throwable $exception, int $depth = 0): array
+    {
+        // Prevent infinite recursion
+        if ($depth > 10) {
+            return ['class' => get_class($exception), 'message' => '[max depth reached]'];
+        }
+
+        $data = [
+            'class' => get_class($exception),
+            'message' => $exception->getMessage(),
+            'code' => $exception->getCode(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+        ];
+
+        // Include previous exception (chained exceptions)
+        $previous = $exception->getPrevious();
+        if ($previous !== null) {
+            $data['previous'] = $this->normalizeException($previous, $depth + 1);
+        }
+
+        return $data;
+    }
+
+    /**
      * Sanitize context to prevent deep nesting and circular references
      *
      * @param array<string, mixed> $context
+     * @param int $depth Current recursion depth
+     * @param \SplObjectStorage|null $seen Track seen objects to detect cycles
      * @return array<string, mixed>
      */
-    private function sanitizeContext(array $context, int $depth = 0): array
+    private function sanitizeContext(array $context, int $depth = 0, ?\SplObjectStorage $seen = null): array
     {
         if ($depth >= $this->maxContextDepth) {
             return ['_truncated' => true];
+        }
+
+        // Initialize seen objects tracker on first call
+        if ($seen === null) {
+            $seen = new \SplObjectStorage();
         }
 
         $sanitized = [];
 
         foreach ($context as $key => $value) {
             if (is_array($value)) {
-                $sanitized[$key] = $this->sanitizeContext($value, $depth + 1);
+                $sanitized[$key] = $this->sanitizeContext($value, $depth + 1, $seen);
             } elseif (is_object($value)) {
+                // Check for circular reference
+                if ($seen->contains($value)) {
+                    $sanitized[$key] = '[circular reference: ' . get_class($value) . ']';
+                    continue;
+                }
+
+                // Track this object
+                $seen->attach($value);
+
                 if ($value instanceof \Throwable) {
-                    $sanitized[$key] = [
-                        'class' => get_class($value),
-                        'message' => $value->getMessage(),
-                        'code' => $value->getCode(),
-                        'file' => $value->getFile(),
-                        'line' => $value->getLine(),
-                    ];
+                    $sanitized[$key] = $this->normalizeException($value);
                 } elseif ($value instanceof \DateTimeInterface) {
                     $sanitized[$key] = $value->format(\DateTimeInterface::RFC3339);
                 } elseif ($value instanceof \JsonSerializable) {
-                    $sanitized[$key] = $value->jsonSerialize();
+                    // Safely handle JsonSerializable - it might return itself or a cycle
+                    try {
+                        $serialized = $value->jsonSerialize();
+                        if ($serialized === $value) {
+                            // Object returned itself, avoid infinite loop
+                            $sanitized[$key] = '[object ' . get_class($value) . ']';
+                        } elseif (is_array($serialized)) {
+                            $sanitized[$key] = $this->sanitizeContext($serialized, $depth + 1, $seen);
+                        } elseif (is_object($serialized)) {
+                            // Recursively sanitize returned object
+                            $sanitized[$key] = $this->sanitizeContext(['_' => $serialized], $depth + 1, $seen)['_'];
+                        } else {
+                            $sanitized[$key] = $serialized;
+                        }
+                    } catch (\Throwable $e) {
+                        $sanitized[$key] = '[JsonSerializable error: ' . $e->getMessage() . ']';
+                    }
                 } elseif (method_exists($value, '__toString')) {
-                    $sanitized[$key] = (string) $value;
+                    try {
+                        $sanitized[$key] = (string) $value;
+                    } catch (\Throwable $e) {
+                        $sanitized[$key] = '[__toString error: ' . $e->getMessage() . ']';
+                    }
                 } else {
                     $sanitized[$key] = '[object ' . get_class($value) . ']';
                 }

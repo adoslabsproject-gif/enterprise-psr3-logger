@@ -32,8 +32,6 @@ use Monolog\Processor\ProcessorInterface;
  * - IP addresses are anonymized if configured
  * - User agents are truncated to prevent log injection
  * - Sensitive headers are never logged
- *
- * @package Senza1dio\EnterprisePSR3Logger\Processors
  */
 class RequestProcessor implements ProcessorInterface
 {
@@ -46,18 +44,50 @@ class RequestProcessor implements ProcessorInterface
     private ?array $cachedData = null;
 
     /**
+     * @var array<string> List of trusted proxy headers for IP detection.
+     *
+     * SECURITY WARNING: X-Forwarded-For and similar headers can be spoofed
+     * by clients. Only trust these headers if your application is behind
+     * a reverse proxy that you control and that overwrites these headers.
+     *
+     * Set to ['REMOTE_ADDR'] only if you don't use a reverse proxy.
+     */
+    private array $trustedProxyHeaders;
+
+    /**
+     * @var bool If true, ONLY use REMOTE_ADDR (safe default for direct connections)
+     */
+    private bool $trustProxyHeaders;
+
+    /**
      * @param string $requestIdHeader Header containing request/correlation ID
      * @param bool $anonymizeIp Anonymize last octet of IP address
      * @param int $userAgentMaxLength Maximum user agent length to log
+     * @param array<string>|null $trustedProxyHeaders Headers to trust for IP detection.
+     *                                                Default is ['REMOTE_ADDR'] only (SAFE). Set explicitly to trust proxy headers.
+     * @param bool $trustProxyHeaders If false (default), only REMOTE_ADDR is used.
+     *                                Set to true AND provide trustedProxyHeaders to trust proxy headers.
      */
     public function __construct(
         string $requestIdHeader = 'X-Request-ID',
         bool $anonymizeIp = false,
-        int $userAgentMaxLength = 200
+        int $userAgentMaxLength = 200,
+        ?array $trustedProxyHeaders = null,
+        bool $trustProxyHeaders = false,
     ) {
         $this->requestIdHeader = $requestIdHeader;
         $this->anonymizeIp = $anonymizeIp;
         $this->userAgentMaxLength = $userAgentMaxLength;
+        $this->trustProxyHeaders = $trustProxyHeaders;
+
+        // SECURITY: Default to ONLY REMOTE_ADDR (safe for direct connections)
+        // User must explicitly enable proxy header trust
+        if ($trustProxyHeaders && $trustedProxyHeaders !== null) {
+            $this->trustedProxyHeaders = $trustedProxyHeaders;
+        } else {
+            // Safe default: only trust direct connection IP
+            $this->trustedProxyHeaders = ['REMOTE_ADDR'];
+        }
     }
 
     /**
@@ -109,6 +139,7 @@ class RequestProcessor implements ProcessorInterface
     {
         $this->cachedRequestId = $requestId;
         $this->cachedData = null; // Invalidate cache
+
         return $this;
     }
 
@@ -167,28 +198,24 @@ class RequestProcessor implements ProcessorInterface
 
     /**
      * Get client IP address, handling proxies
+     *
+     * SECURITY NOTE: This method trusts headers configured in $trustedProxyHeaders.
+     * Ensure your proxy configuration is correct to prevent IP spoofing.
      */
     private function getClientIp(): ?string
     {
-        // Check common proxy headers (in order of trustworthiness)
-        $headers = [
-            'HTTP_X_FORWARDED_FOR',
-            'HTTP_X_REAL_IP',
-            'HTTP_CLIENT_IP',
-            'REMOTE_ADDR',
-        ];
-
-        foreach ($headers as $header) {
+        foreach ($this->trustedProxyHeaders as $header) {
             if (!empty($_SERVER[$header])) {
                 $ip = $_SERVER[$header];
 
-                // X-Forwarded-For can contain multiple IPs
+                // X-Forwarded-For can contain multiple IPs (client, proxy1, proxy2)
+                // The first IP is the original client (if proxy is trusted)
                 if (str_contains($ip, ',')) {
                     $ips = explode(',', $ip);
                     $ip = trim($ips[0]);
                 }
 
-                // Validate IP format
+                // Validate IP format to prevent injection
                 if (filter_var($ip, FILTER_VALIDATE_IP)) {
                     return $ip;
                 }
@@ -196,6 +223,20 @@ class RequestProcessor implements ProcessorInterface
         }
 
         return null;
+    }
+
+    /**
+     * Set trusted proxy headers for IP detection
+     *
+     * @param array<string> $headers Headers to trust (e.g., ['REMOTE_ADDR'] for no proxy)
+     * @return self
+     */
+    public function setTrustedProxyHeaders(array $headers): self
+    {
+        $this->trustedProxyHeaders = $headers;
+        $this->cachedData = null; // Invalidate cache
+
+        return $this;
     }
 
     /**

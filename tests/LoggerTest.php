@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Senza1dio\EnterprisePSR3Logger\Tests;
 
 use Monolog\Handler\TestHandler;
-use Monolog\Level;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
 use Senza1dio\EnterprisePSR3Logger\Logger;
@@ -222,7 +221,7 @@ class LoggerTest extends TestCase
 
     public function testStringableMessage(): void
     {
-        $stringable = new class implements \Stringable {
+        $stringable = new class () implements \Stringable {
             public function __toString(): string
             {
                 return 'Stringable message';

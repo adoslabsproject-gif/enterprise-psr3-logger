@@ -31,8 +31,6 @@ use Monolog\LogRecord;
  * - Duration tracking (if provided in context)
  * - Structured context with key=value pairs
  * - Exception summary with file:line
- *
- * @package Senza1dio\EnterprisePSR3Logger\Formatters
  */
 class DetailedLineFormatter extends NormalizerFormatter implements FormatterInterface
 {
@@ -69,7 +67,7 @@ class DetailedLineFormatter extends NormalizerFormatter implements FormatterInte
         bool $includeMemoryUsage = true,
         bool $includeRequestId = true,
         bool $multiLine = true,
-        string $requestIdKey = 'request_id'
+        string $requestIdKey = 'request_id',
     ) {
         parent::__construct($dateFormat ?? 'Y-m-d H:i:s.u');
 
@@ -88,6 +86,7 @@ class DetailedLineFormatter extends NormalizerFormatter implements FormatterInte
     public function setMaxContextLength(int $length): self
     {
         $this->maxContextLength = max(100, $length);
+
         return $this;
     }
 
@@ -108,14 +107,14 @@ class DetailedLineFormatter extends NormalizerFormatter implements FormatterInte
 
             // Context line (if not empty)
             $context = $this->normalize($record->context);
-            $contextStr = $this->formatContextKeyValue($context);
+            $contextStr = is_array($context) ? $this->formatContextKeyValue($context) : '';
             if ($contextStr !== '') {
                 $output[] = '  │ ' . $contextStr;
             }
 
             // Extra line (if not empty)
             $extra = $this->normalize($record->extra);
-            $extraStr = $this->formatContextKeyValue($extra);
+            $extraStr = is_array($extra) ? $this->formatContextKeyValue($extra) : '';
             if ($extraStr !== '') {
                 $output[] = '  │ ' . $extraStr;
             }
@@ -135,7 +134,7 @@ class DetailedLineFormatter extends NormalizerFormatter implements FormatterInte
             $parts = [$record->message];
 
             $context = $this->normalize($record->context);
-            $contextStr = $this->formatContextKeyValue($context);
+            $contextStr = is_array($context) ? $this->formatContextKeyValue($context) : '';
             if ($contextStr !== '') {
                 $parts[] = $contextStr;
             }
@@ -280,6 +279,7 @@ class DetailedLineFormatter extends NormalizerFormatter implements FormatterInte
                 if (strlen($value) > 50) {
                     $value = substr($value, 0, 50) . '...';
                 }
+
                 return '"' . $value . '"';
             }
 
@@ -300,6 +300,7 @@ class DetailedLineFormatter extends NormalizerFormatter implements FormatterInte
                 if (strlen($json) > 100) {
                     return '[' . count($value) . ' items]';
                 }
+
                 return $json;
             }
 

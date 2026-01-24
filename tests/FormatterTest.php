@@ -19,7 +19,7 @@ class FormatterTest extends TestCase
         Level $level = Level::Info,
         string $channel = 'test',
         array $context = [],
-        array $extra = []
+        array $extra = [],
     ): LogRecord {
         return new LogRecord(
             datetime: new \DateTimeImmutable('2024-01-15 10:30:00'),
@@ -27,7 +27,7 @@ class FormatterTest extends TestCase
             level: $level,
             message: $message,
             context: $context,
-            extra: $extra
+            extra: $extra,
         );
     }
 
@@ -189,7 +189,7 @@ class FormatterTest extends TestCase
         $record = $this->createRecord(
             message: 'Error occurred',
             level: Level::Error,
-            context: ['exception' => $exception]
+            context: ['exception' => $exception],
         );
 
         $output = $formatter->format($record);
@@ -232,7 +232,7 @@ class FormatterTest extends TestCase
         $exception = new \RuntimeException('Test exception', 500);
         $record = $this->createRecord(
             level: Level::Error,
-            context: ['exception' => $exception]
+            context: ['exception' => $exception],
         );
 
         $output = $formatter->format($record);
@@ -259,5 +259,4 @@ class FormatterTest extends TestCase
         // Should have multiple boxes
         $this->assertGreaterThan(1, substr_count($output, '┌'));
     }
-
 }

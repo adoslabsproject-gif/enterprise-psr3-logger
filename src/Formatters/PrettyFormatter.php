@@ -44,8 +44,6 @@ use Monolog\LogRecord;
  * │     #2 /var/www/app/src/Controller/AuthController.php:89 → UserRepo->find()
  * └──────────────────────────────────────────────────────────────────────────────
  * ```
- *
- * @package Senza1dio\EnterprisePSR3Logger\Formatters
  */
 class PrettyFormatter extends NormalizerFormatter implements FormatterInterface
 {
@@ -90,7 +88,7 @@ class PrettyFormatter extends NormalizerFormatter implements FormatterInterface
         bool $useColors = true,
         bool $includeStackTraces = true,
         int $maxTraceDepth = 10,
-        ?string $dateFormat = null
+        ?string $dateFormat = null,
     ) {
         parent::__construct($dateFormat ?? 'Y-m-d H:i:s.u');
 
@@ -106,6 +104,7 @@ class PrettyFormatter extends NormalizerFormatter implements FormatterInterface
     public function setUseColors(bool $useColors): self
     {
         $this->useColors = $useColors;
+
         return $this;
     }
 
@@ -115,6 +114,7 @@ class PrettyFormatter extends NormalizerFormatter implements FormatterInterface
     public function setKeyPadding(int $padding): self
     {
         $this->keyPadding = max(10, min(40, $padding));
+
         return $this;
     }
 
@@ -135,14 +135,14 @@ class PrettyFormatter extends NormalizerFormatter implements FormatterInterface
 
         // Context (if not empty)
         $context = $this->normalize($record->context);
-        if (!empty($context)) {
+        if (!empty($context) && is_array($context)) {
             $output[] = $this->separator();
             $output[] = $this->formatKeyValueSection('CONTEXT', $context);
         }
 
         // Extra (if not empty)
         $extra = $this->normalize($record->extra);
-        if (!empty($extra)) {
+        if (!empty($extra) && is_array($extra)) {
             $output[] = $this->separator();
             $output[] = $this->formatKeyValueSection('EXTRA', $extra);
         }
@@ -352,6 +352,7 @@ class PrettyFormatter extends NormalizerFormatter implements FormatterInterface
             if (strlen($value) > 100) {
                 return substr($value, 0, 100) . $this->colorize('...', self::DIM);
             }
+
             return $value;
         }
 
@@ -371,6 +372,7 @@ class PrettyFormatter extends NormalizerFormatter implements FormatterInterface
 
             if ($isSimple && count($value) <= 5) {
                 $json = json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
                 return $json !== false ? $json : '[...]';
             }
 

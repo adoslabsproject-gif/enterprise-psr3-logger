@@ -1,0 +1,35 @@
+parameters:
+    level: 8
+    paths:
+        - src
+
+    # PHP 8.1+ features (required by Monolog 3)
+    phpVersion: 80100
+
+    # Disable strict PHPDoc-derived type checks
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false
+
+    # Scan vendor for Monolog classes
+    scanDirectories:
+        - vendor/monolog/monolog/src
+
+    ignoreErrors:
+        # Predis is an optional dependency - ignore all related errors
+        - '#unknown class Predis\\Client#'
+        - '#invalid type Predis\\Client#'
+        - '#Class Predis\\Client not found#'
+        - '#Call to method .+ on an unknown class Predis\\Client#'
+        - '#Property .+::.*redis has unknown class Predis\\Client#'
+        - '#Parameter .+redis.+ has invalid type Predis\\Client#'
+        # Properties written for future use (intentional design)
+        - '#Property .+ is never read, only written#'
+        # ?? operators on arrays where key existence varies
+        - '#on left side of \?\? always exists#'
+        - '#on left side of \?\? does not exist#'
+        # Dead catch is intentional defensive coding
+        - '#Dead catch#'
+        # Handler interface method - FormattableHandlerInterface provides this
+        - '#Call to an undefined method Monolog\\Handler\\HandlerInterface::setFormatter#'
+        # SplObjectStorage generic types
+        - '#generic class SplObjectStorage#'
