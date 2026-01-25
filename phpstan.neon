@@ -37,3 +37,12 @@ parameters:
         - '#Call to an undefined method Monolog\\Handler\\HandlerInterface::setFormatter#'
         # SplObjectStorage generic types
         - '#generic class SplObjectStorage#'
+        # TelegramHandler flexibility with level types
+        - '#Parameter \#1 \$level of method Monolog\\Handler\\AbstractHandler::__construct#'
+        # Static property type variations are intentional
+        - '#Static property .+::\$messageCount#'
+        - '#Static property .+::\$loggers#'
+        # Return type array without value type is acceptable for config
+        - '#return type has no value type specified in iterable type array#'
+        # shouldLog method is called dynamically via should_log() function
+        - '#Method .+::shouldLog\(\) is unused#'
