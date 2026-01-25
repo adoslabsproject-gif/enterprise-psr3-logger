@@ -1,5 +1,5 @@
 {
-    "name": "senza1dio/enterprise-psr3-logger",
+    "name": "ados-labs/enterprise-psr3-logger",
     "description": "Enterprise PSR-3 Logger - Channel-based logging with pattern detection, rate limiting, Redis backup, and honest limitations",
     "type": "library",
     "license": "MIT",
@@ -17,9 +17,19 @@
     "authors": [
         {
             "name": "Nicola Cucurachi",
-            "email": "noreply@zelistore.com"
+            "email": "ados.labsproject@gmail.com",
+            "role": "Developer"
+        },
+        {
+            "name": "ADOS Labs",
+            "email": "ados.labsproject@gmail.com"
         }
     ],
+    "homepage": "https://github.com/adoslabsproject-gif/enterprise-psr3-logger",
+    "support": {
+        "issues": "https://github.com/adoslabsproject-gif/enterprise-psr3-logger/issues",
+        "source": "https://github.com/adoslabsproject-gif/enterprise-psr3-logger"
+    },
     "require": {
         "php": "^8.1",
         "ext-json": "*",
@@ -40,7 +50,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Senza1dio\\EnterprisePSR3Logger\\": "src/"
+            "AdosLabs\\EnterprisePSR3Logger\\": "src/"
         },
         "files": [
             "src/Helpers/functions.php",
@@ -49,7 +59,7 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Senza1dio\\EnterprisePSR3Logger\\Tests\\": "tests/"
+            "AdosLabs\\EnterprisePSR3Logger\\Tests\\": "tests/"
         }
     },
     "scripts": {
@@ -64,7 +74,7 @@
     },
     "extra": {
         "admin-panel": {
-            "module": "Senza1dio\\EnterprisePSR3Logger\\AdminIntegration\\LoggerAdminModule",
+            "module": "AdosLabs\\EnterprisePSR3Logger\\AdminIntegration\\LoggerAdminModule",
             "priority": 50,
             "assets-path": "public"
         }

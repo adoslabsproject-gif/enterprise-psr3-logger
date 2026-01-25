@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger;
+namespace AdosLabs\EnterprisePSR3Logger;
 
 use Monolog\Level;
-use Senza1dio\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
-use Senza1dio\EnterprisePSR3Logger\Formatters\JsonFormatter;
-use Senza1dio\EnterprisePSR3Logger\Formatters\PrettyFormatter;
-use Senza1dio\EnterprisePSR3Logger\Handlers\FilterHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
-use Senza1dio\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\HostnameProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\MemoryProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\RequestProcessor;
+use AdosLabs\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
+use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
+use AdosLabs\EnterprisePSR3Logger\Formatters\PrettyFormatter;
+use AdosLabs\EnterprisePSR3Logger\Handlers\FilterHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
+use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\HostnameProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\MemoryProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
 
 /**
  * Logger Factory

@@ -222,6 +222,9 @@ function createLogsTable(PDO $pdo, string $driver, string $tableName): bool
             CREATE INDEX IF NOT EXISTS idx_{$tableName}_request_id ON {$tableName}(request_id);
             CREATE INDEX IF NOT EXISTS idx_{$tableName}_user_id ON {$tableName}(user_id);
             CREATE INDEX IF NOT EXISTS idx_{$tableName}_channel_level_time ON {$tableName}(channel, level_value, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_{$tableName}_level_time ON {$tableName}(level_value, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_{$tableName}_ip ON {$tableName}(ip_address) WHERE ip_address IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_{$tableName}_context ON {$tableName} USING GIN (context jsonb_path_ops);
         SQL,
 
         'mysql' => <<<SQL

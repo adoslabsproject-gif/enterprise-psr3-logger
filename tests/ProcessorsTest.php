@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Tests;
+namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
 use Monolog\Level;
 use Monolog\LogRecord;
 use PHPUnit\Framework\TestCase;
-use Senza1dio\EnterprisePSR3Logger\Processors\ContextProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\HostnameProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\MemoryProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\RequestProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\ContextProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\HostnameProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\MemoryProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
 
 class ProcessorsTest extends TestCase
 {

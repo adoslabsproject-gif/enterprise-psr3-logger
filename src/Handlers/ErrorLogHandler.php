@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Handlers;
+namespace AdosLabs\EnterprisePSR3Logger\Handlers;
 
 use Monolog\Formatter\FormatterInterface;
 use Monolog\Handler\AbstractProcessingHandler;
@@ -118,7 +118,7 @@ class ErrorLogHandler extends AbstractProcessingHandler implements HandlerInterf
     protected function getDefaultFormatter(): FormatterInterface
     {
         // Use line formatter without newlines
-        $formatter = new \Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter(
+        $formatter = new \AdosLabs\EnterprisePSR3Logger\Formatters\LineFormatter(
             format: '[%datetime%] %channel%.%level_name%: %message% %context%',
             ignoreEmptyContextAndExtra: true,
         );

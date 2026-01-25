@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Processors;
+namespace AdosLabs\EnterprisePSR3Logger\Processors;
 
 use Monolog\LogRecord;
 use Monolog\Processor\ProcessorInterface;

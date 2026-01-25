@@ -9,11 +9,11 @@ declare(strict_types=1);
  * These are optional - you can use the Logger class directly.
  */
 
-namespace Senza1dio\EnterprisePSR3Logger;
+namespace AdosLabs\EnterprisePSR3Logger;
 
 use Psr\Log\LoggerInterface;
 
-if (!function_exists('Senza1dio\EnterprisePSR3Logger\logger')) {
+if (!function_exists('AdosLabs\EnterprisePSR3Logger\logger')) {
     /**
      * Get or create a logger instance
      *
@@ -22,7 +22,7 @@ if (!function_exists('Senza1dio\EnterprisePSR3Logger\logger')) {
      *
      * @example
      * ```php
-     * use function Senza1dio\EnterprisePSR3Logger\logger;
+     * use function AdosLabs\EnterprisePSR3Logger\logger;
      *
      * logger()->info('Hello world');
      * logger('security')->warning('Suspicious activity');
@@ -34,7 +34,7 @@ if (!function_exists('Senza1dio\EnterprisePSR3Logger\logger')) {
     }
 }
 
-if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_debug')) {
+if (!function_exists('AdosLabs\EnterprisePSR3Logger\log_debug')) {
     /**
      * Log a debug message
      *
@@ -48,7 +48,7 @@ if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_debug')) {
     }
 }
 
-if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_info')) {
+if (!function_exists('AdosLabs\EnterprisePSR3Logger\log_info')) {
     /**
      * Log an info message
      *
@@ -62,7 +62,7 @@ if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_info')) {
     }
 }
 
-if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_warning')) {
+if (!function_exists('AdosLabs\EnterprisePSR3Logger\log_warning')) {
     /**
      * Log a warning message
      *
@@ -76,7 +76,7 @@ if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_warning')) {
     }
 }
 
-if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_error')) {
+if (!function_exists('AdosLabs\EnterprisePSR3Logger\log_error')) {
     /**
      * Log an error message
      *
@@ -90,7 +90,7 @@ if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_error')) {
     }
 }
 
-if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_critical')) {
+if (!function_exists('AdosLabs\EnterprisePSR3Logger\log_critical')) {
     /**
      * Log a critical message
      *
@@ -104,7 +104,7 @@ if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_critical')) {
     }
 }
 
-if (!function_exists('Senza1dio\EnterprisePSR3Logger\log_exception')) {
+if (!function_exists('AdosLabs\EnterprisePSR3Logger\log_exception')) {
     /**
      * Log an exception with context
      *

@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Tests;
+namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
 use Monolog\Level;
 use Monolog\LogRecord;
 use PHPUnit\Framework\TestCase;
-use Senza1dio\EnterprisePSR3Logger\Formatters\JsonFormatter;
-use Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter;
-use Senza1dio\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
+use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
+use AdosLabs\EnterprisePSR3Logger\Formatters\LineFormatter;
+use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
 
 /**
  * Security-focused tests to verify protection against common attacks

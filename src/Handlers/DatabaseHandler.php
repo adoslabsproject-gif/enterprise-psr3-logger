@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Handlers;
+namespace AdosLabs\EnterprisePSR3Logger\Handlers;
 
 use Monolog\Formatter\FormatterInterface;
 use Monolog\Handler\AbstractProcessingHandler;
@@ -375,6 +375,6 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
      */
     protected function getDefaultFormatter(): FormatterInterface
     {
-        return new \Senza1dio\EnterprisePSR3Logger\Formatters\JsonFormatter(appendNewline: false);
+        return new \AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter(appendNewline: false);
     }
 }

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Tests;
+namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
 use Monolog\Handler\TestHandler;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LogLevel;
-use Senza1dio\EnterprisePSR3Logger\Logger;
+use AdosLabs\EnterprisePSR3Logger\Logger;
 
 class LoggerTest extends TestCase
 {

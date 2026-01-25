@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Handlers;
+namespace AdosLabs\EnterprisePSR3Logger\Handlers;
 
 use Psr\Log\LogLevel;
 use Monolog\Handler\AbstractProcessingHandler;

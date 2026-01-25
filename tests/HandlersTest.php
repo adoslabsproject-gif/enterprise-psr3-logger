@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Tests;
+namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
 use Monolog\Level;
 use Monolog\LogRecord;
 use PHPUnit\Framework\TestCase;
-use Senza1dio\EnterprisePSR3Logger\Handlers\BufferHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\FilterHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\GroupHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\BufferHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\FilterHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\GroupHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
 
 class HandlersTest extends TestCase
 {

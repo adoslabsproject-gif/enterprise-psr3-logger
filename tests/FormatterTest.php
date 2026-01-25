@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Tests;
+namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
 use Monolog\Level;
 use Monolog\LogRecord;
 use PHPUnit\Framework\TestCase;
-use Senza1dio\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
-use Senza1dio\EnterprisePSR3Logger\Formatters\JsonFormatter;
-use Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter;
-use Senza1dio\EnterprisePSR3Logger\Formatters\PrettyFormatter;
+use AdosLabs\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
+use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
+use AdosLabs\EnterprisePSR3Logger\Formatters\LineFormatter;
+use AdosLabs\EnterprisePSR3Logger\Formatters\PrettyFormatter;
 
 class FormatterTest extends TestCase
 {

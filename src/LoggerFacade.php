@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger;
+namespace AdosLabs\EnterprisePSR3Logger;
 
 use Psr\Log\LogLevel;
 
@@ -13,7 +13,7 @@ use Psr\Log\LogLevel;
  *
  * Usage:
  * ```php
- * use Senza1dio\EnterprisePSR3Logger\LoggerFacade as Logger;
+ * use AdosLabs\EnterprisePSR3Logger\LoggerFacade as Logger;
  *
  * Logger::security('warning', 'Failed login', ['ip' => '1.2.3.4']);
  * Logger::api('info', 'HTTP Request', ['method' => 'GET', 'uri' => '/api/users']);

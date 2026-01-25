@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\AdminIntegration\Controllers;
+namespace AdosLabs\EnterprisePSR3Logger\AdminIntegration\Controllers;
 
 use PDO;
 use AdosLabs\AdminPanel\Controllers\BaseController;

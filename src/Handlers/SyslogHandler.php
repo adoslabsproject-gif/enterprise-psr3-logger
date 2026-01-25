@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Handlers;
+namespace AdosLabs\EnterprisePSR3Logger\Handlers;
 
 use Monolog\Formatter\FormatterInterface;
 use Monolog\Handler\AbstractProcessingHandler;
@@ -133,7 +133,7 @@ class SyslogHandler extends AbstractProcessingHandler implements HandlerInterfac
     protected function getDefaultFormatter(): FormatterInterface
     {
         // Syslog already includes timestamp, so use simpler format
-        return new \Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter(
+        return new \AdosLabs\EnterprisePSR3Logger\Formatters\LineFormatter(
             format: '%channel%.%level_name%: %message% %context%',
             ignoreEmptyContextAndExtra: true,
         );

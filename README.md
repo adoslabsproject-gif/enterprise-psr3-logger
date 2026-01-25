@@ -1,8 +1,13 @@
 # Enterprise PSR-3 Logger
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![PHP Version](https://img.shields.io/badge/PHP-8.1%2B-purple.svg)](https://php.net)
+
 PSR-3 compliant logging library built on Monolog with **enterprise-grade configuration-based filtering**.
 
 Part of the **Enterprise Lightning Framework** - integrates with admin-panel and bootstrap for UI-driven configuration.
+
+**Author:** Nicola Cucurachi (ADOS Labs)
 
 ## 🎯 What This Package Does
 
@@ -44,17 +49,17 @@ This package integrates with the Enterprise Lightning Framework for UI-driven co
 
 ```bash
 # 1. FIRST: Admin Panel (creates log_channels table, provides UI)
-composer require senza1dio/enterprise-admin-panel
-php vendor/senza1dio/enterprise-admin-panel/setup/install.php \
+composer require ados-labs/enterprise-admin-panel
+php vendor/ados-labs/enterprise-admin-panel/setup/install.php \
     --driver=pgsql --host=localhost --database=myapp \
     --username=admin --password=secret
 
 # 2. SECOND: Bootstrap (provides should_log() with multi-layer caching)
-composer require senza1dio/enterprise-bootstrap
+composer require ados-labs/enterprise-bootstrap
 
 # 3. THIRD: PSR-3 Logger (THIS PACKAGE)
-composer require senza1dio/enterprise-psr3-logger
-php vendor/senza1dio/enterprise-psr3-logger/setup/install.php \
+composer require ados-labs/enterprise-psr3-logger
+php vendor/ados-labs/enterprise-psr3-logger/setup/install.php \
     --driver=pgsql --host=localhost --database=myapp \
     --username=admin --password=secret
 ```
@@ -89,10 +94,10 @@ Enterprise applications need **dynamic log level configuration** without code ch
 ## 📦 Installation
 
 ```bash
-composer require senza1dio/enterprise-psr3-logger
+composer require ados-labs/enterprise-psr3-logger
 
 # Run installer to create logs table
-php vendor/senza1dio/enterprise-psr3-logger/setup/install.php \
+php vendor/ados-labs/enterprise-psr3-logger/setup/install.php \
     --driver=pgsql --host=localhost --database=myapp \
     --username=admin --password=secret
 ```
@@ -187,7 +192,7 @@ function should_log(string $channel, string $level): bool {
 require __DIR__ . '/vendor/autoload.php';
 
 // 3. NOW create loggers (they will use your should_log() implementation)
-use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
+use AdosLabs\EnterprisePSR3Logger\LoggerFactory;
 
 $logger = LoggerFactory::production('app', '/var/log/app');
 ```
@@ -214,7 +219,7 @@ require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/vendor/autoload.php';
 
 // 3. Use loggers
-use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
+use AdosLabs\EnterprisePSR3Logger\LoggerFactory;
 
 $logger = LoggerFactory::production('app', '/var/log/app');
 ```
@@ -265,7 +270,7 @@ Define should_log() in the GLOBAL namespace in your bootstrap for production use
 ### Step 3: Use Channel-Based Logging
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\LoggerRegistry;
+use AdosLabs\EnterprisePSR3Logger\LoggerRegistry;
 
 // Register channels
 LoggerRegistry::register(LoggerFactory::production('default', '/var/log/app'), 'default');
@@ -295,7 +300,7 @@ If you don't define `should_log()`, the logger will:
 ### Development (Colored Terminal Output)
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
+use AdosLabs\EnterprisePSR3Logger\LoggerFactory;
 
 $logger = LoggerFactory::development('my-app');
 
@@ -346,11 +351,11 @@ $logger = LoggerFactory::container('my-app', environment: 'production');
 ## Manual Configuration
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\Logger;
-use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
-use Senza1dio\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
-use Senza1dio\EnterprisePSR3Logger\Processors\RequestProcessor;
+use AdosLabs\EnterprisePSR3Logger\Logger;
+use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
+use AdosLabs\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
+use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
 use Monolog\Level;
 
 // Create handlers
@@ -453,8 +458,8 @@ function should_log(string $channel, string $level): bool {
 require 'vendor/autoload.php';
 
 // Step 3: Setup channels
-use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
-use Senza1dio\EnterprisePSR3Logger\LoggerRegistry;
+use AdosLabs\EnterprisePSR3Logger\LoggerFactory;
+use AdosLabs\EnterprisePSR3Logger\LoggerRegistry;
 
 LoggerRegistry::register(LoggerFactory::production('default', '/var/log/app'), 'default');
 LoggerRegistry::register(LoggerFactory::production('security', '/var/log/security'), 'security');
@@ -463,7 +468,7 @@ LoggerRegistry::register(LoggerFactory::production('database', '/var/log/db'), '
 LoggerRegistry::register(LoggerFactory::production('email', '/var/log/email'), 'email');
 
 // Step 4: Alias LoggerFacade as Logger
-use Senza1dio\EnterprisePSR3Logger\LoggerFacade as Logger;
+use AdosLabs\EnterprisePSR3Logger\LoggerFacade as Logger;
 ```
 
 ### Usage (Channel-Based Syntax)
@@ -521,7 +526,7 @@ See `examples/channel-syntax.php` for a complete working example with all featur
 Alternatively, use the standard PSR-3 API for instance-based logging:
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\LoggerManager;
+use AdosLabs\EnterprisePSR3Logger\LoggerManager;
 
 $manager = new LoggerManager();
 
@@ -628,7 +633,7 @@ function should_log(string $channel, string $level): bool {
 require 'vendor/autoload.php';
 
 // Use logger
-$logger = Senza1dio\EnterprisePSR3Logger\LoggerFactory::production('app', '/var/log');
+$logger = AdosLabs\EnterprisePSR3Logger\LoggerFactory::production('app', '/var/log');
 ```
 
 ### Q: Can I use a namespace for `should_log()`?
@@ -773,7 +778,7 @@ The `PrettyFormatter` and `DetailedLineFormatter` will display:
 ## Log Separation by Level
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\Handlers\FilterHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\FilterHandler;
 
 // Error log (ERROR and above)
 $errorHandler = new FilterHandler(
@@ -801,7 +806,7 @@ $logger = new Logger('app', [$errorHandler, $infoHandler, $debugHandler]);
 ## Database Logging
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\Handlers\DatabaseHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\DatabaseHandler;
 
 $pdo = new PDO('mysql:host=localhost;dbname=app', 'user', 'pass');
 
@@ -824,7 +829,7 @@ $logs = DatabaseHandler::query($pdo, [
 ## Redis Logging
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\Handlers\RedisHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\RedisHandler;
 
 $redis = new \Redis();
 $redis->connect('127.0.0.1', 6379);
@@ -842,7 +847,7 @@ $handler = new RedisHandler($redis, 'logs:app', strategy: 'pubsub');
 ## Webhook Alerting
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\Handlers\WebhookHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\WebhookHandler;
 use Monolog\Level;
 
 // Slack
@@ -875,7 +880,7 @@ $customHandler = new WebhookHandler(
 ## Async Logging
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\Handlers\AsyncHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\AsyncHandler;
 
 // Wrap any slow handler with AsyncHandler
 $dbHandler = new DatabaseHandler($pdo);
@@ -919,10 +924,10 @@ $logger = LoggerFactory::fromConfig([
 ## Helper Functions
 
 ```php
-use Senza1dio\EnterprisePSR3Logger\LoggerRegistry;
-use function Senza1dio\EnterprisePSR3Logger\log_info;
-use function Senza1dio\EnterprisePSR3Logger\log_error;
-use function Senza1dio\EnterprisePSR3Logger\log_exception;
+use AdosLabs\EnterprisePSR3Logger\LoggerRegistry;
+use function AdosLabs\EnterprisePSR3Logger\log_info;
+use function AdosLabs\EnterprisePSR3Logger\log_error;
+use function AdosLabs\EnterprisePSR3Logger\log_exception;
 
 // Register logger globally
 LoggerRegistry::register($logger, 'app', setAsDefault: true);
@@ -1040,22 +1045,26 @@ This package is **suitable for production use** in most PHP applications. It pro
 - predis/predis (alternative Redis client)
 
 **Recommended Packages:**
-- `senza1dio/enterprise-bootstrap` - Provides intelligent `should_log()` with multi-layer caching
-- `senza1dio/enterprise-admin-panel` - Provides UI for channel configuration
+- `ados-labs/enterprise-bootstrap` - Provides intelligent `should_log()` with multi-layer caching
+- `ados-labs/enterprise-admin-panel` - Provides UI for channel configuration
 
 ## 🌟 Related Packages
 
 | Package | Description | Integration |
 |---------|-------------|-------------|
-| **[senza1dio/enterprise-admin-panel](https://github.com/senza1dio/enterprise-admin-panel)** | Admin interface with channel config UI | Provides LogConfigService + UI |
-| **[senza1dio/enterprise-bootstrap](https://github.com/senza1dio/enterprise-bootstrap)** | Application foundation | Provides `should_log()` with caching |
-| **[senza1dio/enterprise-security-shield](https://github.com/senza1dio/enterprise-security-shield)** | WAF, Honeypot, security | Logs security events |
-| **[senza1dio/database-pool](https://github.com/senza1dio/database-pool)** | Connection pooling | Logs connection events |
+| **[ados-labs/enterprise-admin-panel](https://github.com/adoslabsproject-gif/enterprise-admin-panel)** | Admin interface with channel config UI | Provides LogConfigService + UI |
+| **[ados-labs/enterprise-bootstrap](https://github.com/adoslabsproject-gif/enterprise-bootstrap)** | Application foundation | Provides `should_log()` with caching |
+| **[ados-labs/enterprise-security-shield](https://github.com/adoslabsproject-gif/enterprise-security-shield)** | WAF, Honeypot, security | Logs security events |
+| **[ados-labs/database-pool](https://github.com/adoslabsproject-gif/database-pool)** | Connection pooling | Logs connection events |
 
 ---
 
 **Part of the Enterprise Lightning Framework**
 
+## Author
+
+**Nicola Cucurachi** - [ADOS Labs](https://github.com/adoslabsproject-gif)
+
 ## License
 
-MIT
+MIT - See [LICENSE](LICENSE) for details.

@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger\Tests;
+namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
 use Monolog\Level;
 use PDO;
 use PHPUnit\Framework\TestCase;
-use Senza1dio\EnterprisePSR3Logger\Handlers\BufferHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\DatabaseHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
-use Senza1dio\EnterprisePSR3Logger\Logger;
-use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
-use Senza1dio\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\MemoryProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\RequestProcessor;
+use AdosLabs\EnterprisePSR3Logger\Handlers\BufferHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\DatabaseHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
+use AdosLabs\EnterprisePSR3Logger\Logger;
+use AdosLabs\EnterprisePSR3Logger\LoggerFactory;
+use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\MemoryProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
 
 /**
  * Real-world integration tests with actual I/O operations
@@ -173,8 +173,8 @@ class RealWorldTest extends TestCase
         $logFile = $this->tempDir . '/concurrent.log';
 
         // Use a true single-line formatter
-        $singleLineFormatter = new \Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter(
-            format: \Senza1dio\EnterprisePSR3Logger\Formatters\LineFormatter::COMPACT_FORMAT,
+        $singleLineFormatter = new \AdosLabs\EnterprisePSR3Logger\Formatters\LineFormatter(
+            format: \AdosLabs\EnterprisePSR3Logger\Formatters\LineFormatter::COMPACT_FORMAT,
             ignoreEmptyContextAndExtra: true,
         );
 

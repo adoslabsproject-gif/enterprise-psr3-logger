@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Senza1dio\EnterprisePSR3Logger;
+namespace AdosLabs\EnterprisePSR3Logger;
 
 use Psr\Log\LoggerInterface;
 
