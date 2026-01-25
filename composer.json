@@ -16,8 +16,8 @@
     ],
     "authors": [
         {
-            "name": "Senza1dio",
-            "email": "noreply@senza1dio.com"
+            "name": "Nicola Cucurachi",
+            "email": "noreply@zelistore.com"
         }
     ],
     "require": {
@@ -35,14 +35,16 @@
     "suggest": {
         "ext-redis": "For Redis backup and config caching (recommended for production)",
         "ext-pgsql": "For PostgreSQL database storage (recommended)",
-        "ext-mysqli": "For MySQL database storage"
+        "ext-mysqli": "For MySQL database storage",
+        "ados-labs/enterprise-admin-panel": "For UI-based channel configuration and dashboard integration"
     },
     "autoload": {
         "psr-4": {
             "Senza1dio\\EnterprisePSR3Logger\\": "src/"
         },
         "files": [
-            "src/Helpers/functions.php"
+            "src/Helpers/functions.php",
+            "src/Helpers/should_log_stub.php"
         ]
     },
     "autoload-dev": {
@@ -59,6 +61,13 @@
         "sort-packages": true,
         "optimize-autoloader": true,
         "preferred-install": "dist"
+    },
+    "extra": {
+        "admin-panel": {
+            "module": "Senza1dio\\EnterprisePSR3Logger\\AdminIntegration\\LoggerAdminModule",
+            "priority": 50,
+            "assets-path": "public"
+        }
     },
     "minimum-stability": "stable",
     "prefer-stable": true

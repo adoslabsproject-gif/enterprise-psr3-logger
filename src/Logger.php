@@ -237,9 +237,33 @@ class Logger implements LoggerInterface
 
     public function log($level, string|Stringable $message, array $context = []): void
     {
-        // Check sampling
-        if (!$this->shouldLog($level)) {
-            return;
+        // 🔥 ENTERPRISE GALAXY: Check global should_log() function FIRST
+        // This function MUST be defined in your bootstrap (see README.md)
+        // It provides channel + level based filtering from database configuration
+
+        // Try BOTH: global namespace (\should_log) AND current namespace
+        $shouldLogExists = function_exists('should_log') || function_exists('\should_log');
+
+        if ($shouldLogExists) {
+            // Call with fully qualified name to ensure we get global namespace
+            $shouldLog = function_exists('\should_log')
+                ? \should_log($this->channel, $level)  // Global namespace (preferred)
+                : should_log($this->channel, $level);   // Current namespace (fallback)
+
+            if (!$shouldLog) {
+                return; // Exit immediately - zero overhead
+            }
+        } else {
+            // 🚨 WARNING: should_log() not found - logging without configuration filtering
+            // This is NOT recommended for production. Define should_log() in your bootstrap.
+            // For development/testing, we allow logs through with a warning.
+            static $warned = false;
+            if (!$warned) {
+                $warned = true;
+                error_log('[ENTERPRISE PSR-3 LOGGER] WARNING: should_log() function not found. ' .
+                    'All logs will be written without configuration-based filtering. ' .
+                    'Define should_log() in the GLOBAL namespace in your bootstrap for production use.');
+            }
         }
 
         // Merge global context
@@ -333,23 +357,19 @@ class Logger implements LoggerInterface
     // ==================== Private Methods ====================
 
     /**
-     * Check if we should log based on sampling
+     * DEPRECATED: Random sampling is NOT recommended for enterprise applications
+     *
+     * Use configuration-based filtering via should_log() instead.
+     * This method is kept for backward compatibility but should not be used.
+     *
+     * @deprecated Use should_log() global function instead
      */
     private function shouldLog(string $level): bool
     {
-        // Check level-specific sampling first
-        $rate = $this->levelSamplingRates[$level] ?? $this->samplingRate;
-
-        if ($rate >= 1.0) {
-            return true;
-        }
-
-        if ($rate <= 0.0) {
-            return false;
-        }
-
-        // Random sampling
-        return (mt_rand() / mt_getrandmax()) < $rate;
+        // ENTERPRISE GALAXY: Sampling is a CAZZATA for production
+        // Use should_log() global function for configuration-based filtering
+        // This method always returns true now (backward compatibility only)
+        return true;
     }
 
     /**

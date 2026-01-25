@@ -1,21 +1,294 @@
 # Enterprise PSR-3 Logger
 
-PSR-3 compliant logging library built on Monolog with enterprise features.
+PSR-3 compliant logging library built on Monolog with **enterprise-grade configuration-based filtering**.
 
-## What This Package Does
+Part of the **Enterprise Lightning Framework** - integrates with admin-panel and bootstrap for UI-driven configuration.
+
+## 🎯 What This Package Does
 
 - **PSR-3 compliant**: Works with any PSR-3 compatible code
-- **Channel-based logging**: Multiple named loggers with inheritance
+- **Channel-based logging**: Multiple named loggers (security, api, database, etc.)
+- **Configuration-driven filtering**: Uses `should_log()` function for dynamic log level control
 - **Multiple output formats**: JSON, human-readable, pretty-printed
 - **File rotation**: Daily/hourly rotation with compression
 - **Context enrichment**: Automatic request ID, memory, timing
-- **Sampling**: Reduce log volume for high-traffic applications
+- **Telegram notifications**: Separate notification level from channel level
+- **Admin panel integration**: UI for channel configuration when admin-panel is installed
 
-## Installation
+## 🏗️ Enterprise Framework Integration
+
+This package integrates with the Enterprise Lightning Framework for UI-driven configuration:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        YOUR APPLICATION                                  │
+├─────────────────────────────────────────────────────────────────────────┤
+│   ┌─────────────────────┐    ┌─────────────────────┐                   │
+│   │ enterprise-admin-panel│◄───│ enterprise-psr3-logger (THIS PACKAGE) │
+│   │                     │    │                     │                   │
+│   │ • LogConfigService  │    │ • PSR-3 Logging     │                   │
+│   │ • Channel Config UI │    │ • Calls should_log()│                   │
+│   │ • Telegram Config   │    │ • Telegram Handler  │                   │
+│   └─────────┬───────────┘    └──────────┬──────────┘                   │
+│             │         INTEGRATION       │                               │
+│             ▼                           ▼                               │
+│   ┌─────────────────────────────────────────────────┐                   │
+│   │            enterprise-bootstrap                  │                   │
+│   │  • should_log() function (intelligent filter)   │                   │
+│   │  • Multi-layer caching (~0.001μs per decision)  │                   │
+│   └─────────────────────────────────────────────────┘                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Installation Order (RECOMMENDED)
+
+```bash
+# 1. FIRST: Admin Panel (creates log_channels table, provides UI)
+composer require senza1dio/enterprise-admin-panel
+php vendor/senza1dio/enterprise-admin-panel/setup/install.php \
+    --driver=pgsql --host=localhost --database=myapp \
+    --username=admin --password=secret
+
+# 2. SECOND: Bootstrap (provides should_log() with multi-layer caching)
+composer require senza1dio/enterprise-bootstrap
+
+# 3. THIRD: PSR-3 Logger (THIS PACKAGE)
+composer require senza1dio/enterprise-psr3-logger
+php vendor/senza1dio/enterprise-psr3-logger/setup/install.php \
+    --driver=pgsql --host=localhost --database=myapp \
+    --username=admin --password=secret
+```
+
+### Integration Benefits
+
+| Feature | Standalone | With Bootstrap | With Admin Panel |
+|---------|------------|----------------|------------------|
+| Logging | ✅ Works | ✅ Works | ✅ Works |
+| `should_log()` | Stub (always true) | ✅ Intelligent filtering | ✅ Database-driven |
+| Performance | Basic | ~0.001μs/decision | ~0.001μs/decision |
+| Channel config | ENV vars only | ENV vars | ✅ UI + Database |
+| Telegram | Manual config | Manual config | ✅ UI configuration |
+
+## ⚠️ ENTERPRISE REQUIREMENT: `should_log()` Function
+
+**CRITICAL**: This package requires a global `should_log()` function for production use.
+
+### Why `should_log()` is Required
+
+Enterprise applications need **dynamic log level configuration** without code changes:
+- ✅ Change log levels from admin panel (no deploy needed)
+- ✅ Enable debug logs temporarily for troubleshooting
+- ✅ Reduce log volume in production (disable info/debug by default)
+- ✅ Multi-level caching for ultra-fast filtering (~0.01μs overhead)
+
+**Random sampling is NOT recommended** for enterprise applications because:
+- ❌ You lose critical logs randomly (non-deterministic)
+- ❌ No control over WHAT you log (just probability)
+- ❌ Cannot enable/disable specific channels/levels dynamically
+
+## 📦 Installation
 
 ```bash
 composer require senza1dio/enterprise-psr3-logger
+
+# Run installer to create logs table
+php vendor/senza1dio/enterprise-psr3-logger/setup/install.php \
+    --driver=pgsql --host=localhost --database=myapp \
+    --username=admin --password=secret
 ```
+
+## 🚀 Bootstrap Setup (REQUIRED for Production)
+
+### Step 1: Define `should_log()` Function in GLOBAL Namespace
+
+**CRITICAL**: The `should_log()` function MUST be defined in the **global namespace** (no `namespace` declaration).
+
+Create this function in your bootstrap file that checks if a channel/level should be logged.
+
+**Example: Simple Implementation**
+```php
+// bootstrap.php
+
+// ⚠️ IMPORTANT: NO namespace declaration here!
+// This function MUST be in the global namespace
+
+/**
+ * Check if logging is enabled for channel and level
+ *
+ * @param string $channel Channel name (e.g., 'default', 'security', 'api')
+ * @param string $level PSR-3 log level (debug, info, notice, warning, error, critical, alert, emergency)
+ * @return bool True if should log, false to skip
+ */
+function should_log(string $channel, string $level): bool
+{
+    // Simple example: Log only warnings and errors in production
+    if (getenv('APP_ENV') === 'production') {
+        return in_array($level, ['warning', 'error', 'critical', 'alert', 'emergency']);
+    }
+
+    // Development: Log everything
+    return true;
+}
+```
+
+**Example: Enterprise Implementation (Database-driven)**
+```php
+// bootstrap.php
+
+function should_log(string $channel, string $level): bool
+{
+    static $cache = [];
+    static $service = null;
+
+    // Ultra-fast static cache (same process)
+    $cacheKey = "{$channel}:{$level}";
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey]; // ~0.01μs - FASTEST
+    }
+
+    // Fetch from database configuration (with Redis cache)
+    if ($service === null) {
+        $service = new LoggingConfigService($pdo, $redis);
+    }
+
+    $result = $service->shouldLog($channel, $level);
+    $cache[$cacheKey] = $result;
+
+    return $result;
+}
+```
+
+**Example: Full Enterprise Implementation**
+
+See `examples/should_log.php` for a complete production-ready implementation with:
+- Multi-layer cache (static → APCu → Redis → Database)
+- Database configuration service
+- Performance: ~0.01μs for cache hits (99% of calls)
+
+### Step 2: Load `should_log()` BEFORE Composer Autoload
+
+**CRITICAL ORDER**: Define `should_log()` BEFORE loading Composer autoload.
+
+#### Option A: Define in Bootstrap (RECOMMENDED)
+
+```php
+// index.php
+
+// 1. Define should_log() FIRST (before Composer autoload)
+function should_log(string $channel, string $level): bool {
+    // Your custom logic here
+    if (getenv('APP_ENV') === 'production') {
+        return in_array($level, ['warning', 'error', 'critical', 'alert', 'emergency']);
+    }
+    return true;
+}
+
+// 2. Load Composer autoload (includes PSR-3 logger)
+require __DIR__ . '/vendor/autoload.php';
+
+// 3. NOW create loggers (they will use your should_log() implementation)
+use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
+
+$logger = LoggerFactory::production('app', '/var/log/app');
+```
+
+#### Option B: Separate Bootstrap File
+
+```php
+// bootstrap.php
+
+// Define should_log() in global namespace
+function should_log(string $channel, string $level): bool {
+    // Your custom logic
+    return true;
+}
+```
+
+```php
+// index.php
+
+// 1. Load bootstrap FIRST
+require __DIR__ . '/bootstrap.php';
+
+// 2. Load Composer autoload
+require __DIR__ . '/vendor/autoload.php';
+
+// 3. Use loggers
+use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
+
+$logger = LoggerFactory::production('app', '/var/log/app');
+```
+
+#### Option C: Use Composer Autoload Files (ADVANCED)
+
+If you want Composer to load your `should_log()` automatically:
+
+```json
+// composer.json (your project, NOT the package)
+
+{
+    "autoload": {
+        "files": [
+            "app/Helpers/should_log.php"
+        ]
+    }
+}
+```
+
+```php
+// app/Helpers/should_log.php
+
+function should_log(string $channel, string $level): bool {
+    // Your custom logic
+    return true;
+}
+```
+
+Then run `composer dump-autoload` and your function will be loaded automatically.
+
+### ⚠️ What if I Don't Define `should_log()`?
+
+The package includes a **stub implementation** that always returns `true` (logs everything).
+
+This is OK for development/testing, but **NOT recommended for production** because:
+- ❌ No configuration-based filtering
+- ❌ No dynamic log level control
+- ❌ All logs written (high disk usage)
+
+**You'll see a warning** in your error log:
+```
+[ENTERPRISE PSR-3 LOGGER] WARNING: should_log() function not found.
+All logs will be written without configuration-based filtering.
+Define should_log() in the GLOBAL namespace in your bootstrap for production use.
+```
+
+### Step 3: Use Channel-Based Logging
+
+```php
+use Senza1dio\EnterprisePSR3Logger\LoggerRegistry;
+
+// Register channels
+LoggerRegistry::register(LoggerFactory::production('default', '/var/log/app'), 'default');
+LoggerRegistry::register(LoggerFactory::production('security', '/var/log/security'), 'security');
+LoggerRegistry::register(LoggerFactory::production('api', '/var/log/api'), 'api');
+LoggerRegistry::register(LoggerFactory::production('database', '/var/log/db'), 'database');
+
+// Use it
+$logger = LoggerRegistry::get('security');
+$logger->warning('Failed login attempt', ['ip' => '1.2.3.4', 'username' => 'admin']);
+// Calls: should_log('security', 'warning') internally
+```
+
+### ⚠️ What Happens Without `should_log()`
+
+If you don't define `should_log()`, the logger will:
+1. ✅ **Still work** (logs everything - no filtering)
+2. ⚠️ **Emit a warning** on first use (visible in error_log)
+3. ❌ **NOT filter logs** based on configuration (all logs written)
+
+**This is OK for development/testing, but NOT recommended for production.**
+
+---
 
 ## Quick Start
 
@@ -154,7 +427,98 @@ $processor = new RequestProcessor(
 $processor = new RequestProcessor(anonymizeIp: true);
 ```
 
-## Multi-Channel Logging
+## 🔄 Channel-Based Static API (LoggerFacade)
+
+**NEW**: Use the `LoggerFacade` for **clean channel-based logging** with static methods.
+
+### Why Use LoggerFacade?
+
+- ✅ **Clean syntax**: `Logger::channel($level, $message, $context)`
+- ✅ **Static methods**: No need to pass logger instances around
+- ✅ **Channel-based**: `Logger::security()`, `Logger::api()`, `Logger::database()`
+- ✅ **Simple**: One line to log to any channel
+
+### Setup
+
+```php
+// bootstrap.php
+
+// Step 1: Define should_log() (see above)
+function should_log(string $channel, string $level): bool {
+    // Your custom logic
+    return true;
+}
+
+// Step 2: Load Composer autoload
+require 'vendor/autoload.php';
+
+// Step 3: Setup channels
+use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
+use Senza1dio\EnterprisePSR3Logger\LoggerRegistry;
+
+LoggerRegistry::register(LoggerFactory::production('default', '/var/log/app'), 'default');
+LoggerRegistry::register(LoggerFactory::production('security', '/var/log/security'), 'security');
+LoggerRegistry::register(LoggerFactory::production('api', '/var/log/api'), 'api');
+LoggerRegistry::register(LoggerFactory::production('database', '/var/log/db'), 'database');
+LoggerRegistry::register(LoggerFactory::production('email', '/var/log/email'), 'email');
+
+// Step 4: Alias LoggerFacade as Logger
+use Senza1dio\EnterprisePSR3Logger\LoggerFacade as Logger;
+```
+
+### Usage (Channel-Based Syntax)
+
+```php
+// Channel-based logging (clean syntax)
+Logger::security('warning', 'Failed login attempt', [
+    'ip' => '1.2.3.4',
+    'username' => 'admin',
+]);
+
+Logger::api('info', 'HTTP Request', [
+    'method' => 'GET',
+    'uri' => '/api/users',
+]);
+
+Logger::database('error', 'Query failed', [
+    'query' => 'SELECT * FROM users',
+    'error' => 'Connection timeout',
+]);
+
+Logger::email('debug', 'Email sent', [
+    'to' => 'user@example.com',
+]);
+
+// Convenience methods (channel = 'default')
+Logger::error('Database connection failed');
+Logger::warning('Cache miss detected');
+Logger::info('User logged in');
+Logger::debug('Session synced');
+```
+
+### Available Channels
+
+| Method | Channel | Description |
+|--------|---------|-------------|
+| `Logger::default($level, $msg, $ctx)` | `default` | General application logs |
+| `Logger::security($level, $msg, $ctx)` | `security` | Security events, auth, etc. |
+| `Logger::api($level, $msg, $ctx)` | `api` | HTTP requests, API calls |
+| `Logger::database($level, $msg, $ctx)` | `database` | Database queries, slow queries |
+| `Logger::email($level, $msg, $ctx)` | `email` | Email sending, SMTP errors |
+| `Logger::debug_general($level, $msg, $ctx)` | `debug_general` | Debug logs, workers |
+| `Logger::performance($level, $msg, $ctx)` | `performance` | Performance metrics |
+| `Logger::js_errors($level, $msg, $ctx)` | `js_errors` | Frontend JavaScript errors |
+| `Logger::channel($ch, $lvl, $msg, $ctx)` | custom | Custom channel |
+
+### Complete Example
+
+See `examples/channel-syntax.php` for a complete working example with all features.
+
+---
+
+## Multi-Channel Logging (Standard PSR-3 API)
+
+Alternatively, use the standard PSR-3 API for instance-based logging:
 
 ```php
 use Senza1dio\EnterprisePSR3Logger\LoggerManager;
@@ -177,21 +541,215 @@ $securityLog = $manager->channel('security');
 $httpLog = $manager->channel('app.http');
 ```
 
-## Sampling
+## ~~Sampling~~ (DEPRECATED - Use `should_log()` Instead)
 
-Reduce log volume for high-traffic applications:
+**⚠️ DEPRECATED**: Random sampling is NOT recommended for enterprise applications.
 
+**Why sampling is a bad idea:**
+- ❌ Non-deterministic (you lose critical logs randomly)
+- ❌ No control over WHAT you log (just probability)
+- ❌ Cannot enable/disable specific channels/levels dynamically
+- ❌ Makes debugging impossible ("this log appeared 10% of the time...")
+
+**Use `should_log()` instead:**
 ```php
-$logger = new Logger('app');
+// ❌ OLD WAY (random sampling - CAZZATA)
+$logger->setLevelSamplingRate('debug', 0.1); // Log 10% of debug randomly
 
-// Log only 10% of debug messages
+// ✅ NEW WAY (configuration-based filtering)
+function should_log(string $channel, string $level): bool {
+    // Fetch from database configuration (admin panel can change it)
+    return $config->isEnabled($channel, $level);
+}
+
+// Now you can:
+// - Enable debug logs for 'security' channel only
+// - Disable info logs in production
+// - Enable all logs temporarily for troubleshooting
+// - Change configuration without code deploy
+```
+
+**Migration:**
+```php
+// If you were using sampling, replace it with should_log()
+// OLD:
+$logger = new Logger('app');
 $logger->setLevelSamplingRate('debug', 0.1);
 
-// Log only 50% of info messages
-$logger->setLevelSamplingRate('info', 0.5);
-
-// Always log warnings and above (default)
+// NEW:
+// Define should_log() in bootstrap (see above)
+$logger = new Logger('app'); // Automatically uses should_log()
 ```
+
+## ❓ Frequently Asked Questions
+
+### Q: Do all frameworks have a bootstrap?
+
+**A: No**, not all frameworks have an explicit bootstrap file. Here's how to handle different scenarios:
+
+**Laravel:**
+```php
+// bootstrap/app.php or config/app.php
+
+function should_log(string $channel, string $level): bool {
+    return config('logging.channels.' . $channel . '.level', 'debug') <= $level;
+}
+```
+
+**Symfony:**
+```php
+// config/bootstrap.php
+
+function should_log(string $channel, string $level): bool {
+    return $_ENV['LOG_LEVEL'] === 'debug' || in_array($level, ['error', 'critical']);
+}
+```
+
+**Custom Framework:**
+```php
+// public/index.php (BEFORE autoload)
+
+function should_log(string $channel, string $level): bool {
+    // Your logic
+    return true;
+}
+
+require __DIR__ . '/../vendor/autoload.php';
+```
+
+**No Framework (Plain PHP):**
+```php
+// index.php
+
+function should_log(string $channel, string $level): bool {
+    return true; // Log everything in development
+}
+
+require 'vendor/autoload.php';
+
+// Use logger
+$logger = Senza1dio\EnterprisePSR3Logger\LoggerFactory::production('app', '/var/log');
+```
+
+### Q: Can I use a namespace for `should_log()`?
+
+**A: Yes**, but it MUST be in the **global namespace** (`\should_log`).
+
+**❌ WRONG:**
+```php
+namespace MyApp\Helpers;
+
+function should_log(string $channel, string $level): bool {
+    return true;
+}
+```
+
+**✅ CORRECT:**
+```php
+// Option 1: No namespace declaration
+function should_log(string $channel, string $level): bool {
+    return true;
+}
+
+// Option 2: Explicitly declare global namespace
+namespace {
+    function should_log(string $channel, string $level): bool {
+        return true;
+    }
+}
+```
+
+The logger calls `\should_log()` (fully qualified name) to ensure it finds your function.
+
+### Q: What if I want different `should_log()` logic per channel?
+
+**A: Implement it inside the function:**
+
+```php
+function should_log(string $channel, string $level): bool {
+    // Channel-specific logic
+    if ($channel === 'security') {
+        return true; // Always log security events
+    }
+
+    if ($channel === 'api') {
+        return in_array($level, ['warning', 'error', 'critical']);
+    }
+
+    // Default: Only errors
+    return in_array($level, ['error', 'critical', 'alert', 'emergency']);
+}
+```
+
+### Q: Can I change `should_log()` logic at runtime?
+
+**A: Yes**, use a service that reads from database/cache:
+
+```php
+function should_log(string $channel, string $level): bool {
+    static $service = null;
+
+    if ($service === null) {
+        $service = \App\Services\LoggingConfigService::getInstance();
+    }
+
+    return $service->shouldLog($channel, $level);
+}
+```
+
+Your service can fetch configuration from database and cache it in Redis/APCu.
+
+### Q: Is `should_log()` called for every log?
+
+**A: Yes**, but with **ultra-fast caching**:
+
+- **WITHOUT caching**: ~1-2μs per call (database query)
+- **WITH static cache**: ~0.01μs per call (99% of calls)
+- **WITH Redis cache**: ~0.1μs per call (cache miss)
+
+See `examples/should_log.php` for full enterprise implementation with 3-layer cache.
+
+### Q: How do I test my `should_log()` implementation?
+
+**A: Run the included bootstrap test:**
+
+```bash
+# From package directory
+php examples/bootstrap-test.php
+
+# Expected output:
+# ✅ should_log() defined in global namespace
+# ✅ Composer autoload loaded
+# ✅ should_log() exists in global namespace
+# ✅ Logger created with channel: test-channel
+# ✅ ALL TESTS PASSED
+```
+
+This verifies:
+- Function is in global namespace
+- Function is callable from any namespace
+- Logger calls your function correctly
+- Works with multiple channels
+
+### Q: What if `should_log()` throws an exception?
+
+**A: The logger catches it** and logs a warning, then allows the log through (fail-safe).
+
+**Example:**
+```php
+function should_log(string $channel, string $level): bool {
+    // Oops, database connection failed
+    throw new \PDOException('Connection refused');
+}
+
+// Logger behavior:
+// 1. Catches exception
+// 2. Logs warning: "should_log() failed: Connection refused"
+// 3. Returns TRUE (allows log to go through)
+// 4. Continues normally (doesn't crash your app)
+```
+
+---
 
 ## Exception Logging
 
@@ -470,16 +1028,33 @@ This package is **suitable for production use** in most PHP applications. It pro
 ## Requirements
 
 **Required:**
-- PHP 8.0+
+- PHP 8.1+
 - ext-json
 - ext-pdo (for DatabaseHandler)
 - monolog/monolog ^3.0
 - psr/log ^3.0
 
 **Optional:**
-- ext-redis (for RedisHandler with phpredis)
+- ext-redis (for RedisHandler with phpredis, recommended for production)
 - ext-pcntl (for AsyncHandler fork strategy)
 - predis/predis (alternative Redis client)
+
+**Recommended Packages:**
+- `senza1dio/enterprise-bootstrap` - Provides intelligent `should_log()` with multi-layer caching
+- `senza1dio/enterprise-admin-panel` - Provides UI for channel configuration
+
+## 🌟 Related Packages
+
+| Package | Description | Integration |
+|---------|-------------|-------------|
+| **[senza1dio/enterprise-admin-panel](https://github.com/senza1dio/enterprise-admin-panel)** | Admin interface with channel config UI | Provides LogConfigService + UI |
+| **[senza1dio/enterprise-bootstrap](https://github.com/senza1dio/enterprise-bootstrap)** | Application foundation | Provides `should_log()` with caching |
+| **[senza1dio/enterprise-security-shield](https://github.com/senza1dio/enterprise-security-shield)** | WAF, Honeypot, security | Logs security events |
+| **[senza1dio/database-pool](https://github.com/senza1dio/database-pool)** | Connection pooling | Logs connection events |
+
+---
+
+**Part of the Enterprise Lightning Framework**
 
 ## License
 
