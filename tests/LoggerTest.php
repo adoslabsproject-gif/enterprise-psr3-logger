@@ -7,7 +7,6 @@ namespace AdosLabs\EnterprisePSR3Logger\Tests;
 use AdosLabs\EnterprisePSR3Logger\Logger;
 use Monolog\Handler\TestHandler;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LogLevel;
 
 class LoggerTest extends TestCase
 {
