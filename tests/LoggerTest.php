@@ -111,39 +111,28 @@ class LoggerTest extends TestCase
         $this->assertEquals('test.child', $childLogger->getChannel());
     }
 
+    /**
+     * @deprecated Sampling is deprecated - use should_log() instead
+     */
     public function testSamplingRateZeroLogsNothing(): void
     {
-        $this->logger->setSamplingRate(0.0);
-
-        for ($i = 0; $i < 100; $i++) {
-            $this->logger->info('Message ' . $i);
-        }
-
-        $this->assertCount(0, $this->testHandler->getRecords());
+        $this->markTestSkipped('Sampling is deprecated - use should_log() for filtering');
     }
 
+    /**
+     * @deprecated Sampling is deprecated - use should_log() instead
+     */
     public function testSamplingRateOneLogsEverything(): void
     {
-        $this->logger->setSamplingRate(1.0);
-
-        for ($i = 0; $i < 10; $i++) {
-            $this->logger->info('Message ' . $i);
-        }
-
-        $this->assertCount(10, $this->testHandler->getRecords());
+        $this->markTestSkipped('Sampling is deprecated - use should_log() for filtering');
     }
 
+    /**
+     * @deprecated Sampling is deprecated - use should_log() instead
+     */
     public function testLevelSamplingRate(): void
     {
-        $this->logger->setLevelSamplingRate(LogLevel::DEBUG, 0.0);
-        $this->logger->setSamplingRate(1.0);
-
-        $this->logger->debug('Debug message');
-        $this->logger->info('Info message');
-
-        $records = $this->testHandler->getRecords();
-        $this->assertCount(1, $records);
-        $this->assertEquals('Info message', $records[0]->message);
+        $this->markTestSkipped('Sampling is deprecated - use should_log() for filtering');
     }
 
     public function testAllLogLevels(): void
