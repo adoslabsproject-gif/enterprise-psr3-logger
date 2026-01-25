@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use Monolog\Level;
-use PDO;
-use PHPUnit\Framework\TestCase;
 use AdosLabs\EnterprisePSR3Logger\Handlers\BufferHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\DatabaseHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
@@ -16,6 +13,9 @@ use AdosLabs\EnterprisePSR3Logger\LoggerFactory;
 use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\MemoryProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
+use Monolog\Level;
+use PDO;
+use PHPUnit\Framework\TestCase;
 
 /**
  * Real-world integration tests with actual I/O operations

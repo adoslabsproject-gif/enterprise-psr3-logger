@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use Monolog\Level;
-use Monolog\LogRecord;
-use PHPUnit\Framework\TestCase;
 use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
 use AdosLabs\EnterprisePSR3Logger\Formatters\LineFormatter;
 use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
+use Monolog\Level;
+use Monolog\LogRecord;
+use PHPUnit\Framework\TestCase;
 
 /**
  * Security-focused tests to verify protection against common attacks

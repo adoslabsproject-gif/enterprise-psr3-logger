@@ -25,7 +25,6 @@
  *
  * The function_exists() check below ensures your implementation takes precedence.
  */
-
 if (!function_exists('should_log')) {
     /**
      * STUB: Check if logging is enabled for channel and level

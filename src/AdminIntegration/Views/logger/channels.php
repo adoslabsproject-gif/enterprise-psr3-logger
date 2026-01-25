@@ -106,8 +106,8 @@
                 'alert' => ['value' => 550, 'desc' => 'Action must be taken immediately'],
                 'emergency' => ['value' => 600, 'desc' => 'System is unusable'],
             ];
-            foreach ($levelInfo as $level => $info):
-            ?>
+foreach ($levelInfo as $level => $info):
+    ?>
                 <div class="eap-level-item">
                     <span class="eap-level-badge eap-level-badge--<?= $level ?>"><?= ucfirst($level) ?></span>
                     <span class="eap-text--mono eap-text--sm"><?= $info['value'] ?></span>

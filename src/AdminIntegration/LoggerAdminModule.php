@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\AdminIntegration;
 
+use AdosLabs\AdminPanel\Core\AdminModuleInterface;
+use AdosLabs\AdminPanel\Database\Pool\DatabasePool;
 use PDO;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use AdosLabs\AdminPanel\Core\AdminModuleInterface;
-use AdosLabs\AdminPanel\Database\Pool\DatabasePool;
 
 /**
  * PSR3 Logger Admin Module
@@ -35,7 +35,7 @@ final class LoggerAdminModule implements AdminModuleInterface
      */
     public function __construct(
         DatabasePool|PDO $db,
-        ?LoggerInterface $logger = null
+        ?LoggerInterface $logger = null,
     ) {
         if ($db instanceof DatabasePool) {
             $this->dbPool = $db;
@@ -65,13 +65,16 @@ final class LoggerAdminModule implements AdminModuleInterface
         if ($this->dbPool !== null) {
             // Acquire a connection to check driver
             $conn = $this->dbPool->acquire();
+
             try {
                 $driver = $conn->getPdo()->getAttribute(PDO::ATTR_DRIVER_NAME);
+
                 return $driver;
             } finally {
                 $conn->release();
             }
         }
+
         return $this->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
     }
 
@@ -233,6 +236,7 @@ final class LoggerAdminModule implements AdminModuleInterface
 
         if (!is_dir($sourceDir)) {
             $this->logger->warning('Source assets directory not found', ['path' => $sourceDir]);
+
             return;
         }
 
@@ -241,10 +245,10 @@ final class LoggerAdminModule implements AdminModuleInterface
         $targetJsDir = $targetDir . '/js';
 
         if (!is_dir($targetCssDir)) {
-            @mkdir($targetCssDir, 0755, true);
+            @mkdir($targetCssDir, 0o755, true);
         }
         if (!is_dir($targetJsDir)) {
-            @mkdir($targetJsDir, 0755, true);
+            @mkdir($targetJsDir, 0o755, true);
         }
 
         // Copy CSS files
@@ -304,79 +308,79 @@ final class LoggerAdminModule implements AdminModuleInterface
 
         $sql = match ($driver) {
             'pgsql' => <<<SQL
-                CREATE TABLE IF NOT EXISTS logs (
-                    id BIGSERIAL PRIMARY KEY,
-                    channel VARCHAR(100) NOT NULL,
-                    level VARCHAR(20) NOT NULL,
-                    level_value SMALLINT NOT NULL DEFAULT 0,
-                    message TEXT NOT NULL,
-                    context JSONB DEFAULT '{}'::JSONB,
-                    extra JSONB DEFAULT '{}'::JSONB,
-                    request_id VARCHAR(64),
-                    user_id BIGINT,
-                    ip_address VARCHAR(45),
-                    user_agent TEXT,
-                    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id BIGSERIAL PRIMARY KEY,
+                        channel VARCHAR(100) NOT NULL,
+                        level VARCHAR(20) NOT NULL,
+                        level_value SMALLINT NOT NULL DEFAULT 0,
+                        message TEXT NOT NULL,
+                        context JSONB DEFAULT '{}'::JSONB,
+                        extra JSONB DEFAULT '{}'::JSONB,
+                        request_id VARCHAR(64),
+                        user_id BIGINT,
+                        ip_address VARCHAR(45),
+                        user_agent TEXT,
+                        created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
 
-                CREATE INDEX IF NOT EXISTS idx_logs_channel ON logs(channel);
-                CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level_value);
-                CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_logs_request_id ON logs(request_id);
-                CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
-                CREATE INDEX IF NOT EXISTS idx_logs_channel_time ON logs(channel, created_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_logs_level_time ON logs(level_value, created_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_logs_channel_level_time ON logs(channel, level_value, created_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_logs_ip ON logs(ip_address) WHERE ip_address IS NOT NULL;
-                CREATE INDEX IF NOT EXISTS idx_logs_context ON logs USING GIN (context jsonb_path_ops);
-            SQL,
+                    CREATE INDEX IF NOT EXISTS idx_logs_channel ON logs(channel);
+                    CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level_value);
+                    CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_logs_request_id ON logs(request_id);
+                    CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
+                    CREATE INDEX IF NOT EXISTS idx_logs_channel_time ON logs(channel, created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_logs_level_time ON logs(level_value, created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_logs_channel_level_time ON logs(channel, level_value, created_at DESC);
+                    CREATE INDEX IF NOT EXISTS idx_logs_ip ON logs(ip_address) WHERE ip_address IS NOT NULL;
+                    CREATE INDEX IF NOT EXISTS idx_logs_context ON logs USING GIN (context jsonb_path_ops);
+                SQL,
 
             'mysql' => <<<SQL
-                CREATE TABLE IF NOT EXISTS logs (
-                    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                    channel VARCHAR(100) NOT NULL,
-                    level VARCHAR(20) NOT NULL,
-                    level_value SMALLINT NOT NULL DEFAULT 0,
-                    message TEXT NOT NULL,
-                    context JSON DEFAULT NULL,
-                    extra JSON DEFAULT NULL,
-                    request_id VARCHAR(64),
-                    user_id BIGINT UNSIGNED,
-                    ip_address VARCHAR(45),
-                    user_agent TEXT,
-                    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        channel VARCHAR(100) NOT NULL,
+                        level VARCHAR(20) NOT NULL,
+                        level_value SMALLINT NOT NULL DEFAULT 0,
+                        message TEXT NOT NULL,
+                        context JSON DEFAULT NULL,
+                        extra JSON DEFAULT NULL,
+                        request_id VARCHAR(64),
+                        user_id BIGINT UNSIGNED,
+                        ip_address VARCHAR(45),
+                        user_agent TEXT,
+                        created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
 
-                    INDEX idx_logs_channel (channel),
-                    INDEX idx_logs_level (level_value),
-                    INDEX idx_logs_created_at (created_at),
-                    INDEX idx_logs_request_id (request_id),
-                    INDEX idx_logs_user_id (user_id),
-                    INDEX idx_logs_channel_time (channel, created_at),
-                    INDEX idx_logs_level_time (level_value, created_at),
-                    INDEX idx_logs_channel_level_time (channel, level_value, created_at)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-            SQL,
+                        INDEX idx_logs_channel (channel),
+                        INDEX idx_logs_level (level_value),
+                        INDEX idx_logs_created_at (created_at),
+                        INDEX idx_logs_request_id (request_id),
+                        INDEX idx_logs_user_id (user_id),
+                        INDEX idx_logs_channel_time (channel, created_at),
+                        INDEX idx_logs_level_time (level_value, created_at),
+                        INDEX idx_logs_channel_level_time (channel, level_value, created_at)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                SQL,
 
             'sqlite' => <<<SQL
-                CREATE TABLE IF NOT EXISTS logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    channel VARCHAR(100) NOT NULL,
-                    level VARCHAR(20) NOT NULL,
-                    level_value INTEGER NOT NULL DEFAULT 0,
-                    message TEXT NOT NULL,
-                    context TEXT DEFAULT '{}',
-                    extra TEXT DEFAULT '{}',
-                    request_id VARCHAR(64),
-                    user_id INTEGER,
-                    ip_address VARCHAR(45),
-                    user_agent TEXT,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                );
+                    CREATE TABLE IF NOT EXISTS logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        channel VARCHAR(100) NOT NULL,
+                        level VARCHAR(20) NOT NULL,
+                        level_value INTEGER NOT NULL DEFAULT 0,
+                        message TEXT NOT NULL,
+                        context TEXT DEFAULT '{}',
+                        extra TEXT DEFAULT '{}',
+                        request_id VARCHAR(64),
+                        user_id INTEGER,
+                        ip_address VARCHAR(45),
+                        user_agent TEXT,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
 
-                CREATE INDEX IF NOT EXISTS idx_logs_channel ON logs(channel);
-                CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level_value);
-                CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
-            SQL,
+                    CREATE INDEX IF NOT EXISTS idx_logs_channel ON logs(channel);
+                    CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level_value);
+                    CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
+                SQL,
 
             default => throw new \RuntimeException("Unsupported database driver: {$driver}"),
         };
@@ -401,6 +405,7 @@ final class LoggerAdminModule implements AdminModuleInterface
 
         if (!file_exists($migrationFile)) {
             $this->logger->warning('Migration file not found', ['file' => $migrationFile]);
+
             return;
         }
 
@@ -410,7 +415,7 @@ final class LoggerAdminModule implements AdminModuleInterface
             // Split by semicolon and execute each statement
             $statements = array_filter(
                 array_map('trim', explode(';', $sql)),
-                fn($s) => !empty($s) && !str_starts_with($s, '--')
+                fn ($s) => !empty($s) && !str_starts_with($s, '--'),
             );
 
             foreach ($statements as $statement) {

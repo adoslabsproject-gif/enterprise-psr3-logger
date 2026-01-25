@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\AdminIntegration\Controllers;
 
-use PDO;
 use AdosLabs\AdminPanel\Controllers\BaseController;
 use AdosLabs\AdminPanel\Http\Response;
 use AdosLabs\AdminPanel\Services\AuditService;
 use AdosLabs\AdminPanel\Services\SessionService;
+use PDO;
 
 /**
  * Logger Admin Controller
@@ -105,7 +105,7 @@ final class LoggerController extends BaseController
     public function __construct(
         PDO $pdo,
         SessionService $sessionService,
-        AuditService $auditService
+        AuditService $auditService,
     ) {
         parent::__construct($pdo, $sessionService, $auditService);
     }
@@ -244,8 +244,8 @@ final class LoggerController extends BaseController
         try {
             $message = "🔔 *Test Message*\n\n";
             $message .= "Enterprise Logger connected successfully!\n";
-            $message .= "Time: " . date('Y-m-d H:i:s') . "\n";
-            $message .= "Server: " . gethostname();
+            $message .= 'Time: ' . date('Y-m-d H:i:s') . "\n";
+            $message .= 'Server: ' . gethostname();
 
             $result = $this->sendTelegramMessage($botToken, $chatId, $message);
 
@@ -553,7 +553,7 @@ final class LoggerController extends BaseController
         }
 
         // Sort by modification time (newest first)
-        usort($files, fn($a, $b) => $b['modified'] <=> $a['modified']);
+        usort($files, fn ($a, $b) => $b['modified'] <=> $a['modified']);
 
         return $files;
     }
@@ -561,13 +561,14 @@ final class LoggerController extends BaseController
     private function getRecentLogs(int $limit): array
     {
         try {
-            $stmt = $this->pdo->prepare("
+            $stmt = $this->pdo->prepare('
                 SELECT id, channel, level, message, context, created_at
                 FROM logs
                 ORDER BY created_at DESC
                 LIMIT ?
-            ");
+            ');
             $stmt->execute([$limit]);
+
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (\Exception $e) {
             return [];
@@ -601,34 +602,34 @@ final class LoggerController extends BaseController
 
         try {
             // Total logs today
-            $stmt = $this->pdo->query("
+            $stmt = $this->pdo->query('
                 SELECT COUNT(*) FROM logs WHERE created_at >= CURRENT_DATE
-            ");
+            ');
             $stats['total_today'] = (int) $stmt->fetchColumn();
 
             // Errors today (warning+)
-            $stmt = $this->pdo->query("
+            $stmt = $this->pdo->query('
                 SELECT COUNT(*) FROM logs
                 WHERE created_at >= CURRENT_DATE AND level_value >= 300
-            ");
+            ');
             $stats['errors_today'] = (int) $stmt->fetchColumn();
 
             // By channel today
-            $stmt = $this->pdo->query("
+            $stmt = $this->pdo->query('
                 SELECT channel, COUNT(*) as count
                 FROM logs
                 WHERE created_at >= CURRENT_DATE
                 GROUP BY channel
-            ");
+            ');
             $stats['by_channel'] = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
             // By level today
-            $stmt = $this->pdo->query("
+            $stmt = $this->pdo->query('
                 SELECT level, COUNT(*) as count
                 FROM logs
                 WHERE created_at >= CURRENT_DATE
                 GROUP BY level
-            ");
+            ');
             $stats['by_level'] = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
         } catch (\Exception $e) {
             // Silently fail
@@ -730,6 +731,7 @@ final class LoggerController extends BaseController
         try {
             $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM logs WHERE {$whereClause}");
             $stmt->execute($params);
+
             return (int) $stmt->fetchColumn();
         } catch (\Exception $e) {
             return 0;
@@ -739,7 +741,8 @@ final class LoggerController extends BaseController
     private function getAvailableChannels(): array
     {
         try {
-            $stmt = $this->pdo->query("SELECT DISTINCT channel FROM logs ORDER BY channel");
+            $stmt = $this->pdo->query('SELECT DISTINCT channel FROM logs ORDER BY channel');
+
             return $stmt->fetchAll(PDO::FETCH_COLUMN);
         } catch (\Exception $e) {
             return [];
@@ -749,9 +752,10 @@ final class LoggerController extends BaseController
     private function getConfig(string $key, string $default = ''): string
     {
         try {
-            $stmt = $this->pdo->prepare("SELECT config_value FROM admin_config WHERE config_key = ?");
+            $stmt = $this->pdo->prepare('SELECT config_value FROM admin_config WHERE config_key = ?');
             $stmt->execute([$key]);
             $result = $stmt->fetchColumn();
+
             return $result !== false ? $result : $default;
         } catch (\Exception $e) {
             return $default;
@@ -760,13 +764,13 @@ final class LoggerController extends BaseController
 
     private function setConfig(string $key, string $value, string $type = 'string'): void
     {
-        $stmt = $this->pdo->prepare("
+        $stmt = $this->pdo->prepare('
             INSERT INTO admin_config (config_key, config_value, value_type, updated_at)
             VALUES (?, ?, ?, NOW())
             ON CONFLICT (config_key) DO UPDATE SET
                 config_value = EXCLUDED.config_value,
                 updated_at = NOW()
-        ");
+        ');
         $stmt->execute([$key, $value, $type]);
     }
 
@@ -789,6 +793,7 @@ final class LoggerController extends BaseController
     {
         $logDir = $this->getConfig('log_files_directory', 'storage/logs');
         $projectRoot = $this->getProjectRoot();
+
         return $projectRoot . '/' . $logDir . '/' . $filename;
     }
 
@@ -805,6 +810,7 @@ final class LoggerController extends BaseController
         if (class_exists(\Composer\Autoload\ClassLoader::class)) {
             $reflection = new \ReflectionClass(\Composer\Autoload\ClassLoader::class);
             $vendorPath = dirname($reflection->getFileName(), 2);
+
             return dirname($vendorPath);
         }
 

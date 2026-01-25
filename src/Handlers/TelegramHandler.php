@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Handlers;
 
-use Psr\Log\LogLevel;
 use Monolog\Handler\AbstractProcessingHandler;
-use Monolog\LogRecord;
 use Monolog\Level;
+use Monolog\LogRecord;
 
 /**
  * Telegram Handler
@@ -69,7 +68,7 @@ final class TelegramHandler extends AbstractProcessingHandler
         bool $bubble = true,
         bool $enabled = true,
         bool $silent = false,
-        int $rateLimitPerMinute = 30
+        int $rateLimitPerMinute = 30,
     ) {
         parent::__construct($level, $bubble);
 
@@ -123,8 +122,8 @@ final class TelegramHandler extends AbstractProcessingHandler
         $emoji = self::LEVEL_EMOJIS[$levelName] ?? "\xF0\x9F\x93\x9D"; // 📝
 
         $lines = [
-            sprintf("%s <b>[%s]</b> %s", $emoji, strtoupper($levelName), htmlspecialchars($record->channel)),
-            sprintf("<code>%s</code>", $record->datetime->format('Y-m-d H:i:s')),
+            sprintf('%s <b>[%s]</b> %s', $emoji, strtoupper($levelName), htmlspecialchars($record->channel)),
+            sprintf('<code>%s</code>', $record->datetime->format('Y-m-d H:i:s')),
             '',
             htmlspecialchars($record->message),
         ];
@@ -257,9 +256,9 @@ final class TelegramHandler extends AbstractProcessingHandler
         $message = sprintf(
             "%s <b>Test Message</b>\n\n" .
             "Enterprise PSR-3 Logger Telegram integration is working!\n\n" .
-            "<code>%s</code>",
+            '<code>%s</code>',
             "\xF0\x9F\x94\x94", // 🔔
-            date('Y-m-d H:i:s')
+            date('Y-m-d H:i:s'),
         );
 
         return $this->sendToTelegram($message);

@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use Monolog\Level;
-use Monolog\LogRecord;
-use PHPUnit\Framework\TestCase;
 use AdosLabs\EnterprisePSR3Logger\Handlers\BufferHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\FilterHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\GroupHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
+use Monolog\Level;
+use Monolog\LogRecord;
+use PHPUnit\Framework\TestCase;
 
 class HandlersTest extends TestCase
 {

@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use Monolog\Level;
-use PHPUnit\Framework\TestCase;
 use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
 use AdosLabs\EnterprisePSR3Logger\Formatters\LineFormatter;
 use AdosLabs\EnterprisePSR3Logger\Handlers\FilterHandler;
@@ -17,6 +15,8 @@ use AdosLabs\EnterprisePSR3Logger\LoggerManager;
 use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\MemoryProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
+use Monolog\Level;
+use PHPUnit\Framework\TestCase;
 
 /**
  * Real file logging tests

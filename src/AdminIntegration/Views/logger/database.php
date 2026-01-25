@@ -2,8 +2,7 @@
 /**
  * Database Logs View
  */
-
-$getLevelColor = function($level) {
+$getLevelColor = function ($level) {
     return match(strtolower($level)) {
         'emergency', 'alert', 'critical', 'error' => 'danger',
         'warning' => 'warning',

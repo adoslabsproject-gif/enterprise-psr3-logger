@@ -4,11 +4,6 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use Monolog\Handler\TestHandler;
-use Monolog\Level;
-use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
-use Psr\Log\LogLevel;
 use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
 use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
 use AdosLabs\EnterprisePSR3Logger\Logger;
@@ -16,6 +11,11 @@ use AdosLabs\EnterprisePSR3Logger\LoggerFactory;
 use AdosLabs\EnterprisePSR3Logger\LoggerManager;
 use AdosLabs\EnterprisePSR3Logger\LoggerRegistry;
 use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
+use Monolog\Handler\TestHandler;
+use Monolog\Level;
+use PHPUnit\Framework\TestCase;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 
 /**
  * Integration tests simulating real-world usage patterns

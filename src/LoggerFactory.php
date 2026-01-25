@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger;
 
-use Monolog\Level;
 use AdosLabs\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
 use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
 use AdosLabs\EnterprisePSR3Logger\Formatters\PrettyFormatter;
@@ -15,6 +14,7 @@ use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\HostnameProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\MemoryProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
+use Monolog\Level;
 
 /**
  * Logger Factory

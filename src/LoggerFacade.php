@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger;
 
-use Psr\Log\LogLevel;
-
 /**
  * Logger Facade - Static API for Channel-Based Logging
  *

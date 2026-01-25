@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use Monolog\Handler\TestHandler;
-use PHPUnit\Framework\TestCase;
 use AdosLabs\EnterprisePSR3Logger\Logger;
 use AdosLabs\EnterprisePSR3Logger\LoggerManager;
+use Monolog\Handler\TestHandler;
+use PHPUnit\Framework\TestCase;
 
 class LoggerManagerTest extends TestCase
 {

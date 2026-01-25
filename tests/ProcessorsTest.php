@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use Monolog\Level;
-use Monolog\LogRecord;
-use PHPUnit\Framework\TestCase;
 use AdosLabs\EnterprisePSR3Logger\Processors\ContextProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\HostnameProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\MemoryProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
+use Monolog\Level;
+use Monolog\LogRecord;
+use PHPUnit\Framework\TestCase;
 
 class ProcessorsTest extends TestCase
 {
