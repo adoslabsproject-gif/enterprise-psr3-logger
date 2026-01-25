@@ -3,6 +3,10 @@ parameters:
     paths:
         - src
 
+    # Exclude AdminIntegration (requires optional ados-labs/enterprise-admin-panel)
+    excludePaths:
+        - src/AdminIntegration
+
     # PHP 8.1+ features (required by Monolog 3)
     phpVersion: 80100
 
