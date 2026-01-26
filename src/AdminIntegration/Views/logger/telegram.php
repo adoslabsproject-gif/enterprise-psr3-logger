@@ -2,12 +2,6 @@
 /**
  * Telegram Configuration View
  *
- * Features:
- * - Telegram bot configuration
- * - Level selection (separate from channel levels)
- * - Channel selection for notifications
- * - Test connection button
- *
  * @var array $config Telegram configuration
  * @var array $channels Available channels
  * @var array $levels Available log levels
@@ -18,268 +12,202 @@
  */
 ?>
 
-<div class="eap-page">
-    <div class="eap-page__header">
-        <h1 class="eap-page__title">Telegram Notifications</h1>
-        <p class="eap-page__subtitle">Configure Telegram bot for log notifications</p>
-    </div>
-
-    <div class="eap-grid eap-grid--2" style="gap: 24px;">
-        <!-- Configuration Form -->
-        <div class="eap-card">
-            <div class="eap-card__header">
-                <h2 class="eap-card__title">Bot Configuration</h2>
-                <span class="eap-badge <?= $config['enabled'] ? 'eap-badge--success' : 'eap-badge--secondary' ?>">
-                    <?= $config['enabled'] ? 'Enabled' : 'Disabled' ?>
-                </span>
-            </div>
-            <div class="eap-card__body">
-                <form id="telegram-form" method="POST" action="<?= htmlspecialchars($admin_base_path) ?>/logger/telegram/update">
-                    <?= $csrf_input ?>
-
-                    <div class="eap-form-group">
-                        <label class="eap-toggle eap-toggle--lg">
-                            <input type="checkbox" name="enabled" value="1" <?= $config['enabled'] ? 'checked' : '' ?>>
-                            <span class="eap-toggle__slider"></span>
-                            <span class="eap-toggle__label">Enable Telegram Notifications</span>
-                        </label>
-                        <p class="eap-form-help">When enabled, logs matching the configured level will be sent to Telegram</p>
-                    </div>
-
-                    <div class="eap-form-group">
-                        <label class="eap-label">Bot Token <span class="eap-required">*</span></label>
-                        <input type="password" name="bot_token" id="bot_token" class="eap-input"
-                               value="<?= htmlspecialchars($config['bot_token'] ?? '') ?>"
-                               placeholder="123456789:ABCdefGhIJKlmNoPQRstuVWXyz">
-                        <p class="eap-form-help">Get this from <a href="https://t.me/BotFather" target="_blank">@BotFather</a></p>
-                    </div>
-
-                    <div class="eap-form-group">
-                        <label class="eap-label">Chat ID <span class="eap-required">*</span></label>
-                        <input type="text" name="chat_id" id="chat_id" class="eap-input"
-                               value="<?= htmlspecialchars($config['chat_id'] ?? '') ?>"
-                               placeholder="-1001234567890">
-                        <p class="eap-form-help">Channel, group or personal chat ID. Use <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> to find it.</p>
-                    </div>
-
-                    <div class="eap-form-group">
-                        <label class="eap-label">Minimum Level for Telegram</label>
-                        <select name="level" class="eap-select">
-                            <?php foreach ($levels as $level): ?>
-                            <option value="<?= $level ?>" <?= ($config['level'] ?? 'error') === $level ? 'selected' : '' ?>>
-                                <?= ucfirst($level) ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                        <p class="eap-form-help">
-                            <strong>This level is SEPARATE from channel levels.</strong><br>
-                            Only logs at this level or higher will be sent to Telegram, regardless of channel settings.
-                        </p>
-                    </div>
-
-                    <div class="eap-form-group">
-                        <label class="eap-label">Notify for Channels</label>
-                        <div class="eap-checkbox-group">
-                            <label class="eap-checkbox-label">
-                                <input type="checkbox" name="channels[]" value="*"
-                                       <?= in_array('*', $config['channels'] ?? ['*']) ? 'checked' : '' ?>
-                                       onchange="toggleAllChannels(this)">
-                                <span>All Channels</span>
-                            </label>
-                            <?php foreach ($channels as $key => $channel): ?>
-                            <label class="eap-checkbox-label channel-option" style="<?= in_array('*', $config['channels'] ?? ['*']) ? 'opacity: 0.5;' : '' ?>">
-                                <input type="checkbox" name="channels[]" value="<?= htmlspecialchars($key) ?>"
-                                       <?= in_array($key, $config['channels'] ?? []) ? 'checked' : '' ?>
-                                       <?= in_array('*', $config['channels'] ?? ['*']) ? 'disabled' : '' ?>>
-                                <span><?= htmlspecialchars($channel['name']) ?></span>
-                            </label>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-
-                    <div class="eap-button-group">
-                        <button type="submit" class="eap-btn eap-btn--primary">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                            Save Configuration
-                        </button>
-                        <button type="button" class="eap-btn eap-btn--secondary" id="test-telegram">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                            Test Connection
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Help & Info -->
-        <div>
-            <div class="eap-card">
-                <div class="eap-card__header">
-                    <h2 class="eap-card__title">How it Works</h2>
-                </div>
-                <div class="eap-card__body">
-                    <div class="eap-info-block">
-                        <h4>Level Hierarchy</h4>
-                        <p>Telegram notifications use a <strong>separate level</strong> from channel configurations:</p>
-                        <ol>
-                            <li><strong>Channel Level</strong>: Controls what gets logged to database</li>
-                            <li><strong>Telegram Level</strong>: Controls what gets sent to Telegram</li>
-                        </ol>
-                        <p>Example: If a channel is set to "warning" but Telegram is set to "error", only error+ logs will be sent to Telegram.</p>
-                    </div>
-
-                    <div class="eap-info-block" style="margin-top: 16px;">
-                        <h4>Log Levels (lowest to highest)</h4>
-                        <div class="eap-level-list">
-                            <div class="eap-level-item">
-                                <span class="eap-badge eap-badge--secondary">DEBUG</span>
-                                <span>Detailed debug information</span>
-                            </div>
-                            <div class="eap-level-item">
-                                <span class="eap-badge eap-badge--info">INFO</span>
-                                <span>Interesting events</span>
-                            </div>
-                            <div class="eap-level-item">
-                                <span class="eap-badge eap-badge--info">NOTICE</span>
-                                <span>Normal but significant events</span>
-                            </div>
-                            <div class="eap-level-item">
-                                <span class="eap-badge eap-badge--warning">WARNING</span>
-                                <span>Exceptional occurrences</span>
-                            </div>
-                            <div class="eap-level-item">
-                                <span class="eap-badge eap-badge--danger">ERROR</span>
-                                <span>Runtime errors</span>
-                            </div>
-                            <div class="eap-level-item">
-                                <span class="eap-badge eap-badge--danger">CRITICAL</span>
-                                <span>Critical conditions</span>
-                            </div>
-                            <div class="eap-level-item">
-                                <span class="eap-badge eap-badge--danger">ALERT</span>
-                                <span>Action must be taken immediately</span>
-                            </div>
-                            <div class="eap-level-item">
-                                <span class="eap-badge eap-badge--danger">EMERGENCY</span>
-                                <span>System is unusable</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="eap-card" style="margin-top: 16px;">
-                <div class="eap-card__header">
-                    <h2 class="eap-card__title">Setup Instructions</h2>
-                </div>
-                <div class="eap-card__body">
-                    <div class="eap-steps">
-                        <div class="eap-step">
-                            <div class="eap-step__number">1</div>
-                            <div class="eap-step__content">
-                                <strong>Create a Bot</strong>
-                                <p>Message <a href="https://t.me/BotFather" target="_blank">@BotFather</a> and send <code>/newbot</code></p>
-                            </div>
-                        </div>
-                        <div class="eap-step">
-                            <div class="eap-step__number">2</div>
-                            <div class="eap-step__content">
-                                <strong>Get Bot Token</strong>
-                                <p>BotFather will give you a token like <code>123456:ABC...</code></p>
-                            </div>
-                        </div>
-                        <div class="eap-step">
-                            <div class="eap-step__number">3</div>
-                            <div class="eap-step__content">
-                                <strong>Get Chat ID</strong>
-                                <p>Add the bot to a group/channel, or message <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a></p>
-                            </div>
-                        </div>
-                        <div class="eap-step">
-                            <div class="eap-step__number">4</div>
-                            <div class="eap-step__content">
-                                <strong>Test Connection</strong>
-                                <p>Enter token and chat ID, then click "Test Connection"</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 <style>
-.eap-required {
-    color: #ef4444;
+.eap-telegram-page {
+    max-width: 900px;
 }
-.eap-checkbox-group {
+.eap-telegram-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+@media (max-width: 900px) {
+    .eap-telegram-grid { grid-template-columns: 1fr; }
+}
+.eap-form-section {
+    margin-bottom: 24px;
+}
+.eap-form-section__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--eap-text-primary, #111827);
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--eap-border-color, #e5e7eb);
+}
+.eap-form-group {
+    margin-bottom: 16px;
+}
+.eap-form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--eap-text-primary, #111827);
+    margin-bottom: 6px;
+}
+.eap-form-input,
+.eap-form-select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--eap-border-color, #e5e7eb);
+    border-radius: 8px;
+    font-size: 14px;
+    background: var(--eap-input-bg, #fff);
+    color: var(--eap-text-primary, #111827);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.eap-form-input:focus,
+.eap-form-select:focus {
+    outline: none;
+    border-color: var(--eap-primary, #3b82f6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+.eap-form-hint {
+    font-size: 12px;
+    color: var(--eap-text-muted, #6b7280);
+    margin-top: 6px;
+}
+.eap-form-hint a {
+    color: var(--eap-primary, #3b82f6);
+}
+/* Toggle switch for Enable */
+.eap-enable-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--eap-bg-secondary, #f9fafb);
+    border-radius: 10px;
+    margin-bottom: 24px;
+}
+.eap-enable-toggle__switch {
+    position: relative;
+    width: 52px;
+    height: 28px;
+    flex-shrink: 0;
+}
+.eap-enable-toggle__switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.eap-enable-toggle__slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #d1d5db;
+    transition: 0.3s;
+    border-radius: 28px;
+}
+.eap-enable-toggle__slider:before {
+    position: absolute;
+    content: "";
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+.eap-enable-toggle__switch input:checked + .eap-enable-toggle__slider {
+    background-color: #22c55e;
+}
+.eap-enable-toggle__switch input:checked + .eap-enable-toggle__slider:before {
+    transform: translateX(24px);
+}
+.eap-enable-toggle__text {
+    flex: 1;
+}
+.eap-enable-toggle__title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--eap-text-primary, #111827);
+    margin: 0 0 2px 0;
+}
+.eap-enable-toggle__desc {
+    font-size: 13px;
+    color: var(--eap-text-muted, #6b7280);
+    margin: 0;
+}
+/* Channel checkboxes */
+.eap-channel-checkboxes {
     display: flex;
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 8px;
+    margin-top: 8px;
 }
-.eap-checkbox-label {
+.eap-channel-checkbox {
     display: flex;
     align-items: center;
     gap: 6px;
-    cursor: pointer;
+    padding: 6px 12px;
+    background: var(--eap-bg-secondary, #f9fafb);
+    border: 1px solid var(--eap-border-color, #e5e7eb);
+    border-radius: 6px;
     font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
 }
-.eap-checkbox-label input {
+.eap-channel-checkbox:hover {
+    background: var(--eap-bg-hover, #f3f4f6);
+}
+.eap-channel-checkbox input {
     width: 16px;
     height: 16px;
+    accent-color: var(--eap-primary, #3b82f6);
 }
-.eap-info-block {
-    padding: 16px;
-    background: var(--eap-bg-secondary);
-    border-radius: 8px;
+.eap-channel-checkbox--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
-.eap-info-block h4 {
-    margin: 0 0 8px 0;
-    font-size: 14px;
+/* Info card */
+.eap-info-card {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    padding: 20px;
 }
-.eap-info-block p {
-    margin: 0 0 8px 0;
-    font-size: 13px;
-    color: var(--eap-text-muted);
-}
-.eap-info-block ol {
-    margin: 8px 0;
-    padding-left: 20px;
-}
-.eap-info-block li {
-    font-size: 13px;
-    margin-bottom: 4px;
-}
-.eap-level-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 12px;
-}
-.eap-level-item {
+.eap-info-card__title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1e40af;
+    margin: 0 0 12px 0;
     display: flex;
     align-items: center;
-    gap: 12px;
-    font-size: 12px;
+    gap: 8px;
 }
-.eap-level-item .eap-badge {
-    width: 80px;
-    text-align: center;
+.eap-info-card__content {
+    font-size: 13px;
+    color: #1e3a8a;
+    line-height: 1.6;
 }
+.eap-info-card__content p {
+    margin: 0 0 8px 0;
+}
+.eap-info-card__content strong {
+    color: #1e40af;
+}
+/* Steps */
 .eap-steps {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    counter-reset: step;
 }
 .eap-step {
     display: flex;
-    gap: 12px;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.eap-step:last-child {
+    margin-bottom: 0;
 }
 .eap-step__number {
-    width: 28px;
-    height: 28px;
-    background: var(--eap-primary);
+    width: 32px;
+    height: 32px;
+    background: var(--eap-primary, #3b82f6);
     color: white;
     border-radius: 50%;
     display: flex;
@@ -291,56 +219,255 @@
 }
 .eap-step__content {
     flex: 1;
+    padding-top: 4px;
 }
-.eap-step__content strong {
-    display: block;
+.eap-step__title {
     font-size: 14px;
-    margin-bottom: 4px;
+    font-weight: 600;
+    color: var(--eap-text-primary, #111827);
+    margin: 0 0 4px 0;
 }
-.eap-step__content p {
-    margin: 0;
+.eap-step__desc {
     font-size: 13px;
-    color: var(--eap-text-muted);
+    color: var(--eap-text-muted, #6b7280);
+    margin: 0;
 }
-.eap-step__content code {
-    background: var(--eap-bg-secondary);
+.eap-step__desc code {
+    background: var(--eap-bg-secondary, #f1f5f9);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 12px;
 }
+.eap-step__desc a {
+    color: var(--eap-primary, #3b82f6);
+}
+/* Test result */
+.eap-test-result {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-top: 16px;
+    display: none;
+}
+.eap-test-result--success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+.eap-test-result--error {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+.eap-test-result.show {
+    display: block;
+}
 </style>
 
+<!-- Page Header -->
+<div class="eap-page-header">
+    <a href="<?= htmlspecialchars($admin_base_path) ?>/logger" class="eap-btn eap-btn--ghost eap-btn--sm" style="margin-bottom: 8px;">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        Back to Logger
+    </a>
+    <h1 class="eap-page-title">Telegram Notifications</h1>
+    <p class="eap-page-subtitle">Receive log alerts directly in Telegram</p>
+</div>
+
+<div class="eap-telegram-page">
+    <div class="eap-telegram-grid">
+        <!-- Configuration Form -->
+        <div>
+            <div class="eap-card">
+                <div class="eap-card__header">
+                    <span class="eap-card__title">Bot Configuration</span>
+                </div>
+                <div class="eap-card__body">
+                    <form method="POST" action="<?= htmlspecialchars($admin_base_path) ?>/logger/telegram/update" id="telegram-form">
+                        <?= $csrf_input ?>
+
+                        <!-- Enable Toggle -->
+                        <div class="eap-enable-toggle">
+                            <label class="eap-enable-toggle__switch">
+                                <input type="checkbox" name="enabled" id="telegram-enabled" value="1" <?= ($config['enabled'] ?? false) ? 'checked' : '' ?>>
+                                <span class="eap-enable-toggle__slider"></span>
+                            </label>
+                            <div class="eap-enable-toggle__text">
+                                <h4 class="eap-enable-toggle__title">Enable Telegram Notifications</h4>
+                                <p class="eap-enable-toggle__desc">Send log alerts to your Telegram chat</p>
+                            </div>
+                        </div>
+
+                        <div id="telegram-settings" style="<?= ($config['enabled'] ?? false) ? '' : 'display: none;' ?>">
+                            <div class="eap-form-section">
+                                <h3 class="eap-form-section__title">Connection</h3>
+
+                                <div class="eap-form-group">
+                                    <label class="eap-form-label" for="bot-token">Bot Token *</label>
+                                    <input type="password" name="bot_token" id="bot-token" class="eap-form-input"
+                                           value="<?= htmlspecialchars($config['bot_token'] ?? '') ?>"
+                                           placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz">
+                                    <p class="eap-form-hint">Get this from <a href="https://t.me/BotFather" target="_blank">@BotFather</a></p>
+                                </div>
+
+                                <div class="eap-form-group">
+                                    <label class="eap-form-label" for="chat-id">Chat ID *</label>
+                                    <input type="text" name="chat_id" id="chat-id" class="eap-form-input"
+                                           value="<?= htmlspecialchars($config['chat_id'] ?? '') ?>"
+                                           placeholder="-1001234567890">
+                                    <p class="eap-form-hint">Use <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> to find your ID</p>
+                                </div>
+                            </div>
+
+                            <div class="eap-form-section">
+                                <h3 class="eap-form-section__title">Notification Settings</h3>
+
+                                <div class="eap-form-group">
+                                    <label class="eap-form-label" for="min-level">Minimum Level</label>
+                                    <select name="level" id="min-level" class="eap-form-select">
+                                        <?php foreach ($levels as $level): ?>
+                                        <option value="<?= $level ?>" <?= ($config['level'] ?? 'error') === $level ? 'selected' : '' ?>>
+                                            <?= ucfirst($level) ?>
+                                        </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <p class="eap-form-hint">Only logs at this level or higher will be sent. Recommended: <strong>error</strong></p>
+                                </div>
+
+                                <div class="eap-form-group">
+                                    <label class="eap-form-label">Channels to Notify</label>
+
+                                    <label class="eap-channel-checkbox" style="margin-bottom: 8px;">
+                                        <input type="checkbox" name="channels[]" value="*" id="notify-all"
+                                               <?= in_array('*', $config['channels'] ?? ['*']) ? 'checked' : '' ?>>
+                                        <span><strong>All channels</strong></span>
+                                    </label>
+
+                                    <div class="eap-channel-checkboxes" id="channel-list">
+                                        <?php foreach ($channels as $key => $ch): ?>
+                                        <label class="eap-channel-checkbox <?= in_array('*', $config['channels'] ?? ['*']) ? 'eap-channel-checkbox--disabled' : '' ?>">
+                                            <input type="checkbox" name="channels[]" value="<?= htmlspecialchars($key) ?>"
+                                                   class="channel-cb"
+                                                   <?= in_array($key, $config['channels'] ?? []) ? 'checked' : '' ?>
+                                                   <?= in_array('*', $config['channels'] ?? ['*']) ? 'disabled' : '' ?>>
+                                            <span><?= htmlspecialchars($ch['name'] ?? $key) ?></span>
+                                        </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="test-result" class="eap-test-result"></div>
+                        </div>
+
+                        <div class="eap-button-group" style="margin-top: 24px;">
+                            <button type="submit" class="eap-btn eap-btn--primary">Save Configuration</button>
+                            <button type="button" class="eap-btn eap-btn--secondary" id="test-btn">Test Connection</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Help Section -->
+        <div>
+            <div class="eap-info-card" style="margin-bottom: 20px;">
+                <h3 class="eap-info-card__title">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                    How Levels Work
+                </h3>
+                <div class="eap-info-card__content">
+                    <p><strong>Telegram has a separate level from channels.</strong></p>
+                    <p>Example: Channel "api" logs everything from <strong>warning</strong> and up. But Telegram set to <strong>error</strong> will only notify you for errors and above.</p>
+                    <p>This prevents spam while still keeping detailed logs in the database.</p>
+                </div>
+            </div>
+
+            <div class="eap-card">
+                <div class="eap-card__header">
+                    <span class="eap-card__title">Setup Instructions</span>
+                </div>
+                <div class="eap-card__body">
+                    <div class="eap-steps">
+                        <div class="eap-step">
+                            <div class="eap-step__number">1</div>
+                            <div class="eap-step__content">
+                                <h4 class="eap-step__title">Create a Bot</h4>
+                                <p class="eap-step__desc">Open Telegram, search for <a href="https://t.me/BotFather" target="_blank">@BotFather</a> and send <code>/newbot</code></p>
+                            </div>
+                        </div>
+
+                        <div class="eap-step">
+                            <div class="eap-step__number">2</div>
+                            <div class="eap-step__content">
+                                <h4 class="eap-step__title">Copy Bot Token</h4>
+                                <p class="eap-step__desc">BotFather will give you a token like <code>123456:ABC...</code></p>
+                            </div>
+                        </div>
+
+                        <div class="eap-step">
+                            <div class="eap-step__number">3</div>
+                            <div class="eap-step__content">
+                                <h4 class="eap-step__title">Get Chat ID</h4>
+                                <p class="eap-step__desc">Message <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> to get your numeric ID</p>
+                            </div>
+                        </div>
+
+                        <div class="eap-step">
+                            <div class="eap-step__number">4</div>
+                            <div class="eap-step__content">
+                                <h4 class="eap-step__title">Start the Bot</h4>
+                                <p class="eap-step__desc">Find your bot and click <strong>Start</strong> before it can message you</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     var adminBasePath = <?= json_encode($admin_base_path) ?>;
     var csrfToken = <?= json_encode($csrf_token ?? '') ?>;
 
-    // Toggle all channels
-    window.toggleAllChannels = function(checkbox) {
-        var channelOptions = document.querySelectorAll('.channel-option');
-        channelOptions.forEach(function(label) {
-            var input = label.querySelector('input');
-            input.disabled = checkbox.checked;
-            label.style.opacity = checkbox.checked ? '0.5' : '1';
-            if (checkbox.checked) {
-                input.checked = false;
-            }
-        });
-    };
+    var enabledCheckbox = document.getElementById('telegram-enabled');
+    var settingsDiv = document.getElementById('telegram-settings');
+    var notifyAllCheckbox = document.getElementById('notify-all');
+    var channelCheckboxes = document.querySelectorAll('.channel-cb');
+    var testBtn = document.getElementById('test-btn');
+    var testResult = document.getElementById('test-result');
 
-    // Test Telegram button
-    document.getElementById('test-telegram').addEventListener('click', function() {
-        var btn = this;
-        var botToken = document.getElementById('bot_token').value;
-        var chatId = document.getElementById('chat_id').value;
+    // Toggle settings visibility
+    enabledCheckbox.addEventListener('change', function() {
+        settingsDiv.style.display = this.checked ? 'block' : 'none';
+    });
+
+    // Toggle channel checkboxes
+    notifyAllCheckbox.addEventListener('change', function() {
+        var labels = document.querySelectorAll('#channel-list .eap-channel-checkbox');
+        labels.forEach(function(label) {
+            label.classList.toggle('eap-channel-checkbox--disabled', notifyAllCheckbox.checked);
+        });
+        channelCheckboxes.forEach(function(cb) {
+            cb.disabled = notifyAllCheckbox.checked;
+            if (notifyAllCheckbox.checked) cb.checked = false;
+        });
+    });
+
+    // Test connection
+    testBtn.addEventListener('click', function() {
+        var botToken = document.getElementById('bot-token').value;
+        var chatId = document.getElementById('chat-id').value;
 
         if (!botToken || !chatId) {
-            showToast('Please enter Bot Token and Chat ID first', 'error');
+            showResult(false, 'Please enter bot token and chat ID first');
             return;
         }
 
-        btn.disabled = true;
-        btn.innerHTML = '<svg class="spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg> Testing...';
+        testBtn.disabled = true;
+        testBtn.textContent = 'Testing...';
 
         var formData = new FormData();
         formData.append('_csrf_token', csrfToken);
@@ -349,48 +476,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fetch(adminBasePath + '/logger/telegram/test', {
             method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            },
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: formData
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            if (data.success) {
-                showToast('Test message sent successfully! Check your Telegram.', 'success');
-            } else {
-                showToast('Error: ' + (data.message || 'Failed to send test message'), 'error');
-            }
+            showResult(data.success, data.message || (data.success ? 'Test message sent!' : 'Failed'));
         })
         .catch(function(err) {
-            showToast('Error: ' + err.message, 'error');
+            showResult(false, 'Network error: ' + err.message);
         })
         .finally(function() {
-            btn.disabled = false;
-            btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Test Connection';
+            testBtn.disabled = false;
+            testBtn.textContent = 'Test Connection';
         });
     });
 
-    function showToast(message, type) {
-        var toast = document.createElement('div');
-        toast.className = 'eap-toast eap-toast--' + type;
-        toast.textContent = message;
-        toast.style.cssText = 'position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; z-index: 9999;';
-        toast.style.background = type === 'success' ? '#22c55e' : type === 'error' ? '#ef4444' : '#3b82f6';
-        document.body.appendChild(toast);
-        setTimeout(function() {
-            toast.remove();
-        }, 4000);
+    function showResult(success, message) {
+        testResult.className = 'eap-test-result show ' + (success ? 'eap-test-result--success' : 'eap-test-result--error');
+        testResult.textContent = message;
     }
-});
+})();
 </script>
-
-<style>
-.spin {
-    animation: spin 1s linear infinite;
-}
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-</style>
