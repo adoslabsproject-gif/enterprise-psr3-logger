@@ -110,10 +110,10 @@ final class LoggerAdminModule implements AdminModuleInterface
                         'icon' => 'activity',
                     ],
                     [
-                        'id' => 'logger-database',
-                        'label' => 'Database Logs',
-                        'url' => '/admin/logger/database',
-                        'icon' => 'database',
+                        'id' => 'logger-telegram',
+                        'label' => 'Telegram',
+                        'url' => '/admin/logger/telegram',
+                        'icon' => 'send',
                     ],
                     [
                         'id' => 'logger-php-errors',
@@ -131,28 +131,24 @@ final class LoggerAdminModule implements AdminModuleInterface
         $controller = Controllers\LoggerController::class;
 
         return [
-            // Dashboard
+            // Main Dashboard (channels config + logs viewer)
             ['method' => 'GET', 'path' => '/admin/logger', 'handler' => [$controller, 'index']],
 
-            // Channel configuration
+            // Channel configuration (AJAX)
             ['method' => 'POST', 'path' => '/admin/logger/channel/update', 'handler' => [$controller, 'updateChannel']],
 
-            // Telegram configuration
+            // Logs bulk actions
+            ['method' => 'POST', 'path' => '/admin/logger/logs/delete', 'handler' => [$controller, 'deleteLogs']],
+            ['method' => 'POST', 'path' => '/admin/logger/logs/clear', 'handler' => [$controller, 'clearLogs']],
+
+            // Telegram configuration page
+            ['method' => 'GET', 'path' => '/admin/logger/telegram', 'handler' => [$controller, 'telegram']],
             ['method' => 'POST', 'path' => '/admin/logger/telegram/update', 'handler' => [$controller, 'updateTelegram']],
             ['method' => 'POST', 'path' => '/admin/logger/telegram/test', 'handler' => [$controller, 'testTelegram']],
-
-            // File management
-            ['method' => 'GET', 'path' => '/admin/logger/file/view', 'handler' => [$controller, 'viewFile']],
-            ['method' => 'GET', 'path' => '/admin/logger/file/download', 'handler' => [$controller, 'downloadFile']],
-            ['method' => 'POST', 'path' => '/admin/logger/file/delete', 'handler' => [$controller, 'deleteFiles']],
 
             // PHP errors
             ['method' => 'GET', 'path' => '/admin/logger/php-errors', 'handler' => [$controller, 'phpErrors']],
             ['method' => 'POST', 'path' => '/admin/logger/php-errors/clear', 'handler' => [$controller, 'clearPhpErrors']],
-
-            // Database logs
-            ['method' => 'GET', 'path' => '/admin/logger/database', 'handler' => [$controller, 'databaseLogs']],
-            ['method' => 'POST', 'path' => '/admin/logger/database/clear', 'handler' => [$controller, 'clearDatabaseLogs']],
         ];
     }
 

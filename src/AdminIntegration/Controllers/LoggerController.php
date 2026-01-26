@@ -14,18 +14,14 @@ use PDO;
 /**
  * Logger Admin Controller
  *
- * Complete logging management:
- * - Channel configuration with levels
- * - Log file management (view, download, delete)
- * - Telegram notifications
+ * Features:
+ * - Channel cards with level selection (saved to admin_settings)
+ * - Full logs viewer with filters and bulk actions
+ * - Telegram notifications configuration
  * - PHP errors viewer
- * - Database log viewer
  */
 final class LoggerController extends BaseController
 {
-    /**
-     * Available log levels in order of severity
-     */
     private const LEVELS = [
         'debug' => 100,
         'info' => 200,
@@ -37,26 +33,11 @@ final class LoggerController extends BaseController
         'emergency' => 600,
     ];
 
-    /**
-     * Predefined channels with metadata
-     */
     private const CHANNELS = [
-        'debug_general' => [
-            'name' => 'Debug General',
-            'description' => 'General debug information (debug, info, notice)',
-            'icon' => 'bug',
-            'color' => 'gray',
-        ],
-        'error_general' => [
-            'name' => 'Error General',
-            'description' => 'Application errors (warning to emergency)',
-            'icon' => 'alert-triangle',
-            'color' => 'red',
-        ],
-        'api' => [
-            'name' => 'API',
-            'description' => 'API requests, responses, and errors',
-            'icon' => 'globe',
+        'app' => [
+            'name' => 'Application',
+            'description' => 'General application logs',
+            'icon' => 'box',
             'color' => 'blue',
         ],
         'security' => [
@@ -64,6 +45,12 @@ final class LoggerController extends BaseController
             'description' => 'Authentication, authorization, threats',
             'icon' => 'shield',
             'color' => 'purple',
+        ],
+        'api' => [
+            'name' => 'API',
+            'description' => 'API requests and responses',
+            'icon' => 'globe',
+            'color' => 'cyan',
         ],
         'database' => [
             'name' => 'Database',
@@ -77,29 +64,23 @@ final class LoggerController extends BaseController
             'icon' => 'user',
             'color' => 'green',
         ],
-        'queue' => [
-            'name' => 'Queue/Jobs',
-            'description' => 'Background jobs and queue processing',
-            'icon' => 'layers',
-            'color' => 'cyan',
-        ],
         'mail' => [
             'name' => 'Mail',
             'description' => 'Email sending and delivery',
             'icon' => 'mail',
             'color' => 'pink',
         ],
+        'queue' => [
+            'name' => 'Queue/Jobs',
+            'description' => 'Background jobs processing',
+            'icon' => 'layers',
+            'color' => 'indigo',
+        ],
         'cache' => [
             'name' => 'Cache',
-            'description' => 'Cache operations (verbose)',
+            'description' => 'Cache operations',
             'icon' => 'zap',
             'color' => 'yellow',
-        ],
-        'performance' => [
-            'name' => 'Performance',
-            'description' => 'Timing and performance metrics',
-            'icon' => 'activity',
-            'color' => 'indigo',
         ],
     ];
 
@@ -111,7 +92,6 @@ final class LoggerController extends BaseController
         AuditService $auditService,
     ) {
         parent::__construct($db, $sessionService, $auditService);
-        // Get a PDO connection for direct queries
         $conn = $db->acquire();
         $this->pdo = $conn->getPdo();
     }
@@ -122,32 +102,38 @@ final class LoggerController extends BaseController
      */
     public function index(): Response
     {
-        // Get all channel configurations
-        $channels = $this->getChannelsConfig();
+        // Get channel configurations from admin_settings
+        $channels = $this->getChannelsWithConfig();
 
-        // Get Telegram config
-        $telegram = $this->getTelegramConfig();
+        // Get filters from query
+        $filters = [
+            'channel' => $this->input('channel'),
+            'level' => $this->input('level'),
+            'search' => $this->input('search'),
+            'from' => $this->input('from'),
+            'to' => $this->input('to'),
+        ];
 
-        // Get log files for today
-        $logFiles = $this->getLogFiles();
+        $page = max(1, (int) $this->input('page', 1));
+        $perPage = 50;
 
-        // Get recent database logs
-        $recentLogs = $this->getRecentLogs(20);
+        // Get logs with filters
+        $logs = $this->getLogs($filters, $page, $perPage);
+        $total = $this->getLogsCount($filters);
 
-        // Get PHP errors
-        $phpErrors = $this->getPhpErrors(10);
-
-        // Get stats
-        $stats = $this->getLogStats();
+        // Get available channels from logs table
+        $availableChannels = $this->getAvailableChannels();
 
         return $this->view('logger/index', [
             'channels' => $channels,
-            'telegram' => $telegram,
-            'log_files' => $logFiles,
-            'recent_logs' => $recentLogs,
-            'php_errors' => $phpErrors,
-            'stats' => $stats,
-            'levels' => self::LEVELS,
+            'logs' => $logs,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'pages' => (int) ceil($total / $perPage),
+            'filters' => $filters,
+            'available_channels' => $availableChannels,
+            'levels' => array_keys(self::LEVELS),
             'page_title' => 'Logging Dashboard',
         ]);
     }
@@ -171,11 +157,9 @@ final class LoggerController extends BaseController
         }
 
         try {
-            // Update enabled status
-            $this->setConfig("log_channel_{$channel}_enabled", $enabled ? 'true' : 'false', 'boolean');
-
-            // Update level
-            $this->setConfig("log_channel_{$channel}_level", $level, 'string');
+            // Save to admin_settings
+            $this->saveSetting("log_channel_{$channel}_enabled", $enabled ? '1' : '0');
+            $this->saveSetting("log_channel_{$channel}_level", $level);
 
             $this->audit('logger.channel_updated', [
                 'channel' => $channel,
@@ -183,14 +167,103 @@ final class LoggerController extends BaseController
                 'level' => $level,
             ]);
 
+            return $this->success(['channel' => $channel, 'enabled' => $enabled, 'level' => $level]);
+        } catch (\Exception $e) {
+            return $this->error('Failed to update channel: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Delete selected logs
+     * POST /admin/logger/logs/delete
+     */
+    public function deleteLogs(): Response
+    {
+        // Handle JSON body from AJAX requests
+        $ids = $this->input('ids', []);
+
+        if (empty($ids)) {
+            // Try parsing JSON body
+            $body = (string) ($this->request?->getBody() ?? '');
+            if (!empty($body)) {
+                $json = json_decode($body, true);
+                $ids = $json['ids'] ?? [];
+            }
+        }
+
+        if (empty($ids)) {
+            return $this->error('No logs selected');
+        }
+
+        // Ensure ids are integers
+        $ids = array_map('intval', (array) $ids);
+
+        try {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            $stmt = $this->pdo->prepare("DELETE FROM logs WHERE id IN ({$placeholders})");
+            $stmt->execute($ids);
+            $deleted = $stmt->rowCount();
+
+            $this->audit('logger.logs_deleted', ['count' => $deleted]);
+
+            return $this->success(['deleted' => $deleted]);
+        } catch (\Exception $e) {
+            return $this->error('Failed to delete logs: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Clear logs older than specified time
+     * POST /admin/logger/logs/clear
+     */
+    public function clearLogs(): Response
+    {
+        $olderThan = $this->input('older_than', '7 days');
+        $channel = $this->input('channel');
+
+        try {
+            $sql = "DELETE FROM logs WHERE created_at < NOW() - INTERVAL '{$olderThan}'";
+            $params = [];
+
+            if ($channel) {
+                $sql .= " AND channel = ?";
+                $params[] = $channel;
+            }
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            $deleted = $stmt->rowCount();
+
+            $this->audit('logger.logs_cleared', [
+                'deleted' => $deleted,
+                'older_than' => $olderThan,
+                'channel' => $channel,
+            ]);
+
             if ($this->isAjax()) {
-                return $this->success(['channel' => $channel, 'enabled' => $enabled, 'level' => $level]);
+                return $this->success(['deleted' => $deleted]);
             }
 
             return $this->redirect($this->adminUrl('logger'));
         } catch (\Exception $e) {
-            return $this->error('Failed to update channel: ' . $e->getMessage());
+            return $this->error('Failed to clear logs: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Telegram configuration page
+     * GET /admin/logger/telegram
+     */
+    public function telegram(): Response
+    {
+        $config = $this->getTelegramConfig();
+
+        return $this->view('logger/telegram', [
+            'config' => $config,
+            'channels' => self::CHANNELS,
+            'levels' => array_keys(self::LEVELS),
+            'page_title' => 'Telegram Notifications',
+        ]);
     }
 
     /**
@@ -204,31 +277,28 @@ final class LoggerController extends BaseController
         $chatId = $this->input('chat_id', '');
         $level = $this->input('level', 'error');
         $channels = $this->input('channels', []);
-        $rateLimit = (int) $this->input('rate_limit', 10);
 
         if ($enabled && (empty($botToken) || empty($chatId))) {
             return $this->error('Bot token and Chat ID are required when Telegram is enabled');
         }
 
         try {
-            $this->setConfig('log_telegram_enabled', $enabled ? 'true' : 'false', 'boolean');
-            $this->setConfig('log_telegram_bot_token', $botToken, 'string');
-            $this->setConfig('log_telegram_chat_id', $chatId, 'string');
-            $this->setConfig('log_telegram_level', $level, 'string');
-            $this->setConfig('log_telegram_channels', json_encode($channels), 'json');
-            $this->setConfig('log_telegram_rate_limit', (string) $rateLimit, 'integer');
+            $this->saveSetting('log_telegram_enabled', $enabled ? '1' : '0');
+            $this->saveSetting('log_telegram_bot_token', $botToken);
+            $this->saveSetting('log_telegram_chat_id', $chatId);
+            $this->saveSetting('log_telegram_level', $level);
+            $this->saveSetting('log_telegram_channels', json_encode($channels) ?: '[]');
 
             $this->audit('logger.telegram_updated', [
                 'enabled' => $enabled,
                 'level' => $level,
-                'channels_count' => count($channels),
             ]);
 
             if ($this->isAjax()) {
                 return $this->success(['enabled' => $enabled]);
             }
 
-            return $this->redirect($this->adminUrl('logger'));
+            return $this->redirect($this->adminUrl('logger/telegram'));
         } catch (\Exception $e) {
             return $this->error('Failed to update Telegram config: ' . $e->getMessage());
         }
@@ -250,8 +320,8 @@ final class LoggerController extends BaseController
         try {
             $message = "🔔 *Test Message*\n\n";
             $message .= "Enterprise Logger connected successfully!\n";
-            $message .= 'Time: ' . date('Y-m-d H:i:s') . "\n";
-            $message .= 'Server: ' . gethostname();
+            $message .= "Time: " . date('Y-m-d H:i:s') . "\n";
+            $message .= "Server: " . gethostname();
 
             $result = $this->sendTelegramMessage($botToken, $chatId, $message);
 
@@ -266,118 +336,13 @@ final class LoggerController extends BaseController
     }
 
     /**
-     * View log file contents
-     * GET /admin/logger/file/view
-     */
-    public function viewFile(): Response
-    {
-        $filename = $this->input('file', '');
-
-        if (empty($filename) || !$this->isValidLogFile($filename)) {
-            return $this->error('Invalid file');
-        }
-
-        $filepath = $this->getLogFilePath($filename);
-
-        if (!file_exists($filepath)) {
-            return $this->error('File not found');
-        }
-
-        $content = file_get_contents($filepath);
-        $lines = explode("\n", $content);
-        $totalLines = count($lines);
-
-        // Get last 500 lines for display
-        $displayLines = array_slice($lines, -500);
-
-        return $this->view('logger/file-view', [
-            'filename' => $filename,
-            'content' => implode("\n", $displayLines),
-            'total_lines' => $totalLines,
-            'file_size' => filesize($filepath),
-            'modified' => filemtime($filepath),
-            'page_title' => 'View Log: ' . $filename,
-        ]);
-    }
-
-    /**
-     * Download log file
-     * GET /admin/logger/file/download
-     */
-    public function downloadFile(): Response
-    {
-        $filename = $this->input('file', '');
-
-        if (empty($filename) || !$this->isValidLogFile($filename)) {
-            return $this->error('Invalid file');
-        }
-
-        $filepath = $this->getLogFilePath($filename);
-
-        if (!file_exists($filepath)) {
-            return $this->error('File not found');
-        }
-
-        $this->audit('logger.file_downloaded', ['file' => $filename]);
-
-        return Response::download($filepath, $filename);
-    }
-
-    /**
-     * Delete log files
-     * POST /admin/logger/file/delete
-     */
-    public function deleteFiles(): Response
-    {
-        $files = $this->input('files', []);
-
-        if (empty($files)) {
-            return $this->error('No files selected');
-        }
-
-        $deleted = 0;
-        $errors = [];
-
-        foreach ($files as $filename) {
-            if (!$this->isValidLogFile($filename)) {
-                $errors[] = "Invalid file: {$filename}";
-                continue;
-            }
-
-            $filepath = $this->getLogFilePath($filename);
-
-            if (file_exists($filepath)) {
-                if (unlink($filepath)) {
-                    $deleted++;
-                } else {
-                    $errors[] = "Failed to delete: {$filename}";
-                }
-            }
-        }
-
-        $this->audit('logger.files_deleted', [
-            'count' => $deleted,
-            'files' => $files,
-        ]);
-
-        if ($this->isAjax()) {
-            return $this->success([
-                'deleted' => $deleted,
-                'errors' => $errors,
-            ]);
-        }
-
-        return $this->redirect($this->adminUrl('logger'));
-    }
-
-    /**
-     * View PHP errors log
+     * PHP Errors page
      * GET /admin/logger/php-errors
      */
     public function phpErrors(): Response
     {
-        $phpErrorsFile = $this->getConfig('log_php_errors_file', 'storage/logs/php_errors.log');
-        $projectRoot = $this->getProjectRoot();
+        $phpErrorsFile = $this->getSetting('log_php_errors_file', 'storage/logs/php_errors.log');
+        $projectRoot = defined('EAP_PROJECT_ROOT') ? EAP_PROJECT_ROOT : getcwd();
         $filepath = $projectRoot . '/' . $phpErrorsFile;
 
         $content = '';
@@ -389,11 +354,9 @@ final class LoggerController extends BaseController
             $exists = true;
             $fileSize = filesize($filepath);
             $modified = filemtime($filepath);
-
-            // Read last 1000 lines
-            $lines = file($filepath);
-            $displayLines = array_slice($lines, -1000);
-            $content = implode('', $displayLines);
+            $lines = file($filepath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+            $displayLines = array_slice($lines, -500);
+            $content = implode("\n", $displayLines);
         }
 
         return $this->view('logger/php-errors', [
@@ -412,8 +375,8 @@ final class LoggerController extends BaseController
      */
     public function clearPhpErrors(): Response
     {
-        $phpErrorsFile = $this->getConfig('log_php_errors_file', 'storage/logs/php_errors.log');
-        $projectRoot = $this->getProjectRoot();
+        $phpErrorsFile = $this->getSetting('log_php_errors_file', 'storage/logs/php_errors.log');
+        $projectRoot = defined('EAP_PROJECT_ROOT') ? EAP_PROJECT_ROOT : getcwd();
         $filepath = $projectRoot . '/' . $phpErrorsFile;
 
         if (file_exists($filepath)) {
@@ -428,88 +391,22 @@ final class LoggerController extends BaseController
         return $this->redirect($this->adminUrl('logger/php-errors'));
     }
 
-    /**
-     * Database log viewer with filters
-     * GET /admin/logger/database
-     */
-    public function databaseLogs(): Response
-    {
-        $filters = [
-            'channel' => $this->input('channel'),
-            'level' => $this->input('level'),
-            'search' => $this->input('search'),
-            'from' => $this->input('from'),
-            'to' => $this->input('to'),
-        ];
-
-        $page = max(1, (int) $this->input('page', 1));
-        $perPage = 50;
-
-        $logs = $this->getLogs($filters, $page, $perPage);
-        $total = $this->getLogsCount($filters);
-        $availableChannels = $this->getAvailableChannels();
-
-        return $this->view('logger/database', [
-            'logs' => $logs,
-            'total' => $total,
-            'page' => $page,
-            'per_page' => $perPage,
-            'pages' => (int) ceil($total / $perPage),
-            'filters' => $filters,
-            'channels' => $availableChannels,
-            'levels' => array_keys(self::LEVELS),
-            'page_title' => 'Database Logs',
-        ]);
-    }
-
-    /**
-     * Clear old database logs
-     * POST /admin/logger/database/clear
-     */
-    public function clearDatabaseLogs(): Response
-    {
-        $olderThan = $this->input('older_than', '7 days');
-
-        try {
-            $stmt = $this->pdo->prepare("
-                DELETE FROM logs
-                WHERE created_at < NOW() - INTERVAL '{$olderThan}'
-            ");
-            $stmt->execute();
-            $deleted = $stmt->rowCount();
-
-            $this->audit('logger.database_logs_cleared', [
-                'deleted' => $deleted,
-                'older_than' => $olderThan,
-            ]);
-
-            if ($this->isAjax()) {
-                return $this->success(['deleted' => $deleted]);
-            }
-
-            return $this->redirect($this->adminUrl('logger/database'));
-        } catch (\Exception $e) {
-            return $this->error('Failed to clear logs: ' . $e->getMessage());
-        }
-    }
-
     // =========================================================================
     // Private Helpers
     // =========================================================================
 
-    private function getChannelsConfig(): array
+    private function getChannelsWithConfig(): array
     {
         $channels = [];
 
         foreach (self::CHANNELS as $key => $meta) {
-            $enabled = $this->getConfig("log_channel_{$key}_enabled", 'true') === 'true';
-            $level = $this->getConfig("log_channel_{$key}_level", 'info');
+            $enabled = $this->getSetting("log_channel_{$key}_enabled", '1') === '1';
+            $level = $this->getSetting("log_channel_{$key}_level", 'info');
 
             $channels[$key] = array_merge($meta, [
                 'key' => $key,
                 'enabled' => $enabled,
                 'level' => $level,
-                'level_value' => self::LEVELS[$level] ?? 200,
             ]);
         }
 
@@ -519,129 +416,12 @@ final class LoggerController extends BaseController
     private function getTelegramConfig(): array
     {
         return [
-            'enabled' => $this->getConfig('log_telegram_enabled', 'false') === 'true',
-            'bot_token' => $this->getConfig('log_telegram_bot_token', ''),
-            'chat_id' => $this->getConfig('log_telegram_chat_id', ''),
-            'level' => $this->getConfig('log_telegram_level', 'error'),
-            'channels' => json_decode($this->getConfig('log_telegram_channels', '["error_general","security"]'), true) ?? [],
-            'rate_limit' => (int) $this->getConfig('log_telegram_rate_limit', '10'),
+            'enabled' => $this->getSetting('log_telegram_enabled', '0') === '1',
+            'bot_token' => $this->getSetting('log_telegram_bot_token', ''),
+            'chat_id' => $this->getSetting('log_telegram_chat_id', ''),
+            'level' => $this->getSetting('log_telegram_level', 'error'),
+            'channels' => json_decode($this->getSetting('log_telegram_channels', '[]'), true) ?? [],
         ];
-    }
-
-    private function getLogFiles(): array
-    {
-        $logDir = $this->getConfig('log_files_directory', 'storage/logs');
-        $projectRoot = $this->getProjectRoot();
-        $fullPath = $projectRoot . '/' . $logDir;
-
-        if (!is_dir($fullPath)) {
-            return [];
-        }
-
-        $files = [];
-        $iterator = new \DirectoryIterator($fullPath);
-
-        foreach ($iterator as $file) {
-            if ($file->isDot() || $file->isDir()) {
-                continue;
-            }
-
-            if ($file->getExtension() !== 'log') {
-                continue;
-            }
-
-            $files[] = [
-                'name' => $file->getFilename(),
-                'size' => $file->getSize(),
-                'modified' => $file->getMTime(),
-                'is_today' => date('Y-m-d', $file->getMTime()) === date('Y-m-d'),
-            ];
-        }
-
-        // Sort by modification time (newest first)
-        usort($files, fn ($a, $b) => $b['modified'] <=> $a['modified']);
-
-        return $files;
-    }
-
-    private function getRecentLogs(int $limit): array
-    {
-        try {
-            $stmt = $this->pdo->prepare('
-                SELECT id, channel, level, message, context, created_at
-                FROM logs
-                ORDER BY created_at DESC
-                LIMIT ?
-            ');
-            $stmt->execute([$limit]);
-
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-        } catch (\Exception $e) {
-            return [];
-        }
-    }
-
-    private function getPhpErrors(int $limit): array
-    {
-        $phpErrorsFile = $this->getConfig('log_php_errors_file', 'storage/logs/php_errors.log');
-        $projectRoot = $this->getProjectRoot();
-        $filepath = $projectRoot . '/' . $phpErrorsFile;
-
-        if (!file_exists($filepath)) {
-            return [];
-        }
-
-        $lines = file($filepath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        $recentLines = array_slice($lines, -$limit);
-
-        return array_reverse($recentLines);
-    }
-
-    private function getLogStats(): array
-    {
-        $stats = [
-            'total_today' => 0,
-            'errors_today' => 0,
-            'by_channel' => [],
-            'by_level' => [],
-        ];
-
-        try {
-            // Total logs today
-            $stmt = $this->pdo->query('
-                SELECT COUNT(*) FROM logs WHERE created_at >= CURRENT_DATE
-            ');
-            $stats['total_today'] = (int) $stmt->fetchColumn();
-
-            // Errors today (warning+)
-            $stmt = $this->pdo->query('
-                SELECT COUNT(*) FROM logs
-                WHERE created_at >= CURRENT_DATE AND level_value >= 300
-            ');
-            $stats['errors_today'] = (int) $stmt->fetchColumn();
-
-            // By channel today
-            $stmt = $this->pdo->query('
-                SELECT channel, COUNT(*) as count
-                FROM logs
-                WHERE created_at >= CURRENT_DATE
-                GROUP BY channel
-            ');
-            $stats['by_channel'] = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-
-            // By level today
-            $stmt = $this->pdo->query('
-                SELECT level, COUNT(*) as count
-                FROM logs
-                WHERE created_at >= CURRENT_DATE
-                GROUP BY level
-            ');
-            $stats['by_level'] = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
-        } catch (\Exception $e) {
-            // Silently fail
-        }
-
-        return $stats;
     }
 
     private function getLogs(array $filters, int $page, int $perPage): array
@@ -680,7 +460,7 @@ final class LoggerController extends BaseController
 
         try {
             $stmt = $this->pdo->prepare("
-                SELECT id, channel, level, level_value, message, context, extra, created_at, request_id
+                SELECT id, channel, level, message, context, created_at
                 FROM logs
                 WHERE {$whereClause}
                 ORDER BY created_at DESC
@@ -692,7 +472,6 @@ final class LoggerController extends BaseController
 
             foreach ($logs as &$log) {
                 $log['context'] = json_decode($log['context'] ?? '{}', true);
-                $log['extra'] = json_decode($log['extra'] ?? '{}', true);
             }
 
             return $logs;
@@ -737,7 +516,6 @@ final class LoggerController extends BaseController
         try {
             $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM logs WHERE {$whereClause}");
             $stmt->execute($params);
-
             return (int) $stmt->fetchColumn();
         } catch (\Exception $e) {
             return 0;
@@ -747,90 +525,35 @@ final class LoggerController extends BaseController
     private function getAvailableChannels(): array
     {
         try {
-            $stmt = $this->pdo->query('SELECT DISTINCT channel FROM logs ORDER BY channel');
-
+            $stmt = $this->pdo->query("SELECT DISTINCT channel FROM logs ORDER BY channel");
             return $stmt->fetchAll(PDO::FETCH_COLUMN);
         } catch (\Exception $e) {
             return [];
         }
     }
 
-    private function getConfig(string $key, string $default = ''): string
+    private function getSetting(string $key, string $default = ''): string
     {
         try {
-            $stmt = $this->pdo->prepare('SELECT config_value FROM admin_config WHERE config_key = ?');
+            $stmt = $this->pdo->prepare("SELECT setting_value FROM admin_settings WHERE setting_key = ?");
             $stmt->execute([$key]);
             $result = $stmt->fetchColumn();
-
             return $result !== false ? $result : $default;
         } catch (\Exception $e) {
             return $default;
         }
     }
 
-    private function setConfig(string $key, string $value, string $type = 'string'): void
+    private function saveSetting(string $key, string $value): void
     {
-        $stmt = $this->pdo->prepare('
-            INSERT INTO admin_config (config_key, config_value, value_type, updated_at)
-            VALUES (?, ?, ?, NOW())
-            ON CONFLICT (config_key) DO UPDATE SET
-                config_value = EXCLUDED.config_value,
+        $stmt = $this->pdo->prepare("
+            INSERT INTO admin_settings (setting_key, setting_value, updated_at)
+            VALUES (?, ?, NOW())
+            ON CONFLICT (setting_key) DO UPDATE SET
+                setting_value = EXCLUDED.setting_value,
                 updated_at = NOW()
-        ');
-        $stmt->execute([$key, $value, $type]);
-    }
-
-    private function isValidLogFile(string $filename): bool
-    {
-        // Prevent directory traversal
-        if (str_contains($filename, '..') || str_contains($filename, '/') || str_contains($filename, '\\')) {
-            return false;
-        }
-
-        // Only .log files
-        if (!str_ends_with($filename, '.log')) {
-            return false;
-        }
-
-        return true;
-    }
-
-    private function getLogFilePath(string $filename): string
-    {
-        $logDir = $this->getConfig('log_files_directory', 'storage/logs');
-        $projectRoot = $this->getProjectRoot();
-
-        return $projectRoot . '/' . $logDir . '/' . $filename;
-    }
-
-    private function getProjectRoot(): string
-    {
-        // Try multiple methods to find project root
-        // 1. If DOCUMENT_ROOT is set and points to public/, go up one level
-        $docRoot = $_SERVER['DOCUMENT_ROOT'] ?? '';
-        if ($docRoot && basename($docRoot) === 'public') {
-            return dirname($docRoot);
-        }
-
-        // 2. Use Composer autoloader path if available
-        if (class_exists(\Composer\Autoload\ClassLoader::class)) {
-            $reflection = new \ReflectionClass(\Composer\Autoload\ClassLoader::class);
-            $vendorPath = dirname($reflection->getFileName(), 2);
-
-            return dirname($vendorPath);
-        }
-
-        // 3. Fallback: look for vendor/autoload.php going up directories
-        $dir = __DIR__;
-        for ($i = 0; $i < 10; $i++) {
-            $dir = dirname($dir);
-            if (file_exists($dir . '/vendor/autoload.php')) {
-                return $dir;
-            }
-        }
-
-        // 4. Last resort: current working directory
-        return getcwd() ?: dirname(__DIR__, 6);
+        ");
+        $stmt->execute([$key, $value]);
     }
 
     private function sendTelegramMessage(string $botToken, string $chatId, string $message): bool
