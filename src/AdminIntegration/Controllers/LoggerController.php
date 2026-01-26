@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdosLabs\EnterprisePSR3Logger\AdminIntegration\Controllers;
 
 use AdosLabs\AdminPanel\Controllers\BaseController;
+use AdosLabs\AdminPanel\Database\Pool\DatabasePool;
 use AdosLabs\AdminPanel\Http\Response;
 use AdosLabs\AdminPanel\Services\AuditService;
 use AdosLabs\AdminPanel\Services\SessionService;
@@ -102,12 +103,17 @@ final class LoggerController extends BaseController
         ],
     ];
 
+    private PDO $pdo;
+
     public function __construct(
-        PDO $pdo,
+        DatabasePool $db,
         SessionService $sessionService,
         AuditService $auditService,
     ) {
-        parent::__construct($pdo, $sessionService, $auditService);
+        parent::__construct($db, $sessionService, $auditService);
+        // Get a PDO connection for direct queries
+        $conn = $db->acquire();
+        $this->pdo = $conn->getPdo();
     }
 
     /**
