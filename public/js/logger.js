@@ -1,594 +1,354 @@
 /**
- * Enterprise PSR3 Logger - Admin Module JavaScript
+ * PSR-3 Logger Admin Integration JavaScript
  *
- * CSP Compliant: No inline scripts
- * All event handlers are attached via addEventListener
- *
- * @package senza1dio/enterprise-psr3-logger
- * @version 1.0.0
+ * CSP-compliant - external script file
  */
-
 (function() {
     'use strict';
 
-    // Get admin base path from data attribute on body or default
-    const adminBase = document.body.dataset.adminBasePath || '/admin';
+    // Get config from hidden inputs (CSP-safe way)
+    var adminBasePathEl = document.getElementById('logger-admin-base-path');
+    var csrfTokenEl = document.getElementById('logger-csrf-token');
 
-    // Get CSRF token from meta tag
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-
-    /**
-     * Initialize logger dashboard functionality
-     */
-    function initDashboard() {
-        initChannelToggles();
-        initChannelLevelSelects();
-        initTelegramForm();
-        initFileManagement();
+    if (!adminBasePathEl) {
+        // Not on logger page
+        return;
     }
 
-    /**
-     * Channel toggle handlers
-     */
-    function initChannelToggles() {
-        document.querySelectorAll('.channel-toggle').forEach(toggle => {
+    var adminBasePath = adminBasePathEl.value;
+    var csrfToken = csrfTokenEl ? csrfTokenEl.value : '';
+
+    // ==========================================================================
+    // Channel Management
+    // ==========================================================================
+
+    function initChannelManagement() {
+        // Channel toggle switches
+        document.querySelectorAll('.channel-toggle').forEach(function(toggle) {
             toggle.addEventListener('change', function() {
-                const channel = this.dataset.channel;
-                const enabled = this.checked ? '1' : '0';
-                const levelSelect = document.querySelector(`.channel-level[data-channel="${channel}"]`);
-                const level = levelSelect ? levelSelect.value : 'info';
+                var channel = this.dataset.channel;
+                var card = this.closest('.eap-logger-channel-card');
+                var levelSelect = card.querySelector('.channel-level');
 
-                updateChannel(channel, enabled, level);
+                card.classList.toggle('eap-logger-channel-card--disabled', !this.checked);
+                saveChannel(channel, this.checked, levelSelect.value);
             });
         });
-    }
 
-    /**
-     * Channel level select handlers
-     */
-    function initChannelLevelSelects() {
-        document.querySelectorAll('.channel-level').forEach(select => {
+        // Channel level selects
+        document.querySelectorAll('.channel-level').forEach(function(select) {
             select.addEventListener('change', function() {
-                const channel = this.dataset.channel;
-                const level = this.value;
-                const toggle = document.querySelector(`.channel-toggle[data-channel="${channel}"]`);
-                const enabled = toggle && toggle.checked ? '1' : '0';
+                var channel = this.dataset.channel;
+                var card = this.closest('.eap-logger-channel-card');
+                var toggle = card.querySelector('.channel-toggle');
 
-                updateChannel(channel, enabled, level);
+                saveChannel(channel, toggle.checked, this.value);
             });
         });
     }
 
-    /**
-     * Update channel configuration via AJAX
-     */
-    function updateChannel(channel, enabled, level) {
-        fetch(`${adminBase}/logger/channel/update`, {
+    function saveChannel(channel, enabled, level) {
+        fetch(adminBasePath + '/logger/channel/update', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'X-Requested-With': 'XMLHttpRequest'
             },
-            body: `channel=${encodeURIComponent(channel)}&enabled=${enabled}&level=${encodeURIComponent(level)}&_csrf_token=${encodeURIComponent(csrfToken)}`
+            body: '_csrf_token=' + encodeURIComponent(csrfToken) +
+                  '&channel=' + encodeURIComponent(channel) +
+                  '&enabled=' + (enabled ? '1' : '0') +
+                  '&level=' + encodeURIComponent(level)
         })
-        .then(r => r.json())
-        .then(data => {
-            if (!data.success) {
-                showNotification(data.error || 'Failed to update channel', 'error');
-            } else {
-                showNotification('Channel updated', 'success');
-            }
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            showToast(
+                data.success ? 'Channel updated' : 'Error: ' + (data.message || 'Failed'),
+                data.success ? 'success' : 'error'
+            );
         })
-        .catch(err => {
-            console.error('Error:', err);
-            showNotification('Network error', 'error');
+        .catch(function(err) {
+            showToast('Network error: ' + err.message, 'error');
         });
     }
 
-    /**
-     * Telegram form handlers
-     */
-    function initTelegramForm() {
-        const telegramForm = document.getElementById('telegram-form');
-        const telegramEnabled = document.getElementById('telegram-enabled');
-        const testTelegramBtn = document.getElementById('test-telegram');
+    // ==========================================================================
+    // Log Selection & Deletion
+    // ==========================================================================
 
-        if (telegramForm) {
-            telegramForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                const formData = new FormData(this);
-                if (telegramEnabled) {
-                    formData.append('enabled', telegramEnabled.checked ? '1' : '0');
-                }
+    function initLogManagement() {
+        var selectAll = document.getElementById('select-all');
+        var deleteBtn = document.getElementById('delete-selected');
 
-                fetch(`${adminBase}/logger/telegram/update`, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) {
-                        showNotification('Telegram settings saved', 'success');
-                    } else {
-                        showNotification(data.error || 'Failed to save', 'error');
-                    }
-                })
-                .catch(err => {
-                    console.error('Error:', err);
-                    showNotification('Network error', 'error');
-                });
-            });
+        if (!selectAll || !deleteBtn) {
+            return;
         }
-
-        if (testTelegramBtn && telegramForm) {
-            testTelegramBtn.addEventListener('click', function() {
-                const formData = new FormData(telegramForm);
-
-                fetch(`${adminBase}/logger/telegram/test`, {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(r => r.json())
-                .then(data => {
-                    showNotification(
-                        data.success ? 'Test message sent!' : (data.error || 'Test failed'),
-                        data.success ? 'success' : 'error'
-                    );
-                })
-                .catch(err => {
-                    console.error('Error:', err);
-                    showNotification('Network error', 'error');
-                });
-            });
-        }
-
-        // Toggle label update
-        if (telegramEnabled) {
-            const label = telegramEnabled.closest('.eap-toggle-inline')?.querySelector('.eap-toggle-label');
-            if (label) {
-                telegramEnabled.addEventListener('change', function() {
-                    label.textContent = this.checked ? 'Enabled' : 'Disabled';
-                });
-            }
-        }
-    }
-
-    /**
-     * File management handlers
-     */
-    function initFileManagement() {
-        const selectAll = document.getElementById('select-all-files');
-        const fileCheckboxes = document.querySelectorAll('.file-checkbox');
-        const deleteBtn = document.getElementById('delete-selected');
-        const filesForm = document.getElementById('files-form');
 
         // Select all checkbox
-        if (selectAll) {
-            selectAll.addEventListener('change', function() {
-                fileCheckboxes.forEach(cb => cb.checked = this.checked);
-                updateDeleteButton();
+        selectAll.addEventListener('change', function() {
+            document.querySelectorAll('.log-select').forEach(function(cb) {
+                cb.checked = selectAll.checked;
             });
-        }
-
-        // Individual file checkboxes
-        fileCheckboxes.forEach(cb => {
-            cb.addEventListener('change', updateDeleteButton);
+            updateDeleteBtn();
         });
 
-        function updateDeleteButton() {
-            const checked = document.querySelectorAll('.file-checkbox:checked').length;
-            if (deleteBtn) {
-                deleteBtn.disabled = checked === 0;
-                deleteBtn.textContent = checked > 0 ? `Delete Selected (${checked})` : 'Delete Selected';
-            }
-        }
+        // Individual checkboxes
+        document.querySelectorAll('.log-select').forEach(function(cb) {
+            cb.addEventListener('change', updateDeleteBtn);
+        });
 
-        // Delete button
-        if (deleteBtn && filesForm) {
-            deleteBtn.addEventListener('click', function() {
-                if (!confirm('Delete selected log files?')) return;
+        // Delete selected button
+        deleteBtn.addEventListener('click', function() {
+            var selected = document.querySelectorAll('.log-select:checked');
+            if (selected.length === 0) return;
+            if (!confirm('Delete ' + selected.length + ' log(s)?')) return;
 
-                const formData = new FormData(filesForm);
+            var ids = Array.from(selected).map(function(cb) { return cb.value; });
 
-                fetch(`${adminBase}/logger/file/delete`, {
+            fetch(adminBasePath + '/logger/logs/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ ids: ids, _csrf_token: csrfToken })
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    selected.forEach(function(cb) { cb.closest('tr').remove(); });
+                    showToast('Deleted ' + data.deleted + ' log(s)', 'success');
+                    selectAll.checked = false;
+                    updateDeleteBtn();
+                } else {
+                    showToast('Error: ' + (data.message || 'Failed'), 'error');
+                }
+            })
+            .catch(function(err) {
+                showToast('Network error: ' + err.message, 'error');
+            });
+        });
+
+        // Single delete buttons
+        document.querySelectorAll('.delete-log').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var id = this.dataset.id;
+                var row = this.closest('tr');
+                if (!confirm('Delete this log?')) return;
+
+                fetch(adminBasePath + '/logger/logs/delete', {
                     method: 'POST',
-                    body: formData
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ ids: [id], _csrf_token: csrfToken })
                 })
-                .then(r => r.json())
-                .then(data => {
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
                     if (data.success) {
-                        location.reload();
+                        row.remove();
+                        showToast('Log deleted', 'success');
                     } else {
-                        showNotification(data.error || 'Failed to delete files', 'error');
+                        showToast('Error: ' + (data.message || 'Failed'), 'error');
                     }
                 })
-                .catch(err => {
-                    console.error('Error:', err);
-                    showNotification('Network error', 'error');
+                .catch(function(err) {
+                    showToast('Network error: ' + err.message, 'error');
                 });
             });
+        });
+
+        function updateDeleteBtn() {
+            var count = document.querySelectorAll('.log-select:checked').length;
+            deleteBtn.disabled = count === 0;
+            deleteBtn.textContent = count > 0 ? 'Delete Selected (' + count + ')' : 'Delete Selected';
         }
     }
 
-    /**
-     * Initialize database logs page
-     */
-    function initDatabaseLogs() {
-        // Toggle context visibility
-        document.querySelectorAll('.toggle-context').forEach(btn => {
+    // ==========================================================================
+    // Context Modal
+    // ==========================================================================
+
+    function initContextModal() {
+        var modal = document.getElementById('context-modal');
+        var content = document.getElementById('context-content');
+
+        if (!modal || !content) {
+            return;
+        }
+
+        document.querySelectorAll('.eap-logger-context-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
-                const logId = this.dataset.logId;
-                const context = document.getElementById('context-' + logId);
-                if (context) {
-                    const isHidden = context.style.display === 'none';
-                    context.style.display = isHidden ? 'block' : 'none';
-                    this.textContent = isHidden ? 'Hide Context' : 'Show Context';
+                content.textContent = this.dataset.context;
+                modal.classList.remove('hidden');
+            });
+        });
+    }
+
+    // ==========================================================================
+    // Clear Logs Modal
+    // ==========================================================================
+
+    function initClearModal() {
+        var clearBtn = document.getElementById('clear-old-logs');
+        var modal = document.getElementById('clear-modal');
+
+        if (!clearBtn || !modal) {
+            return;
+        }
+
+        clearBtn.addEventListener('click', function() {
+            modal.classList.remove('hidden');
+        });
+    }
+
+    // ==========================================================================
+    // Modal Close Handlers
+    // ==========================================================================
+
+    function initModalCloseHandlers() {
+        // Close buttons
+        document.querySelectorAll('.eap-logger-modal__close, .modal-close').forEach(function(el) {
+            el.addEventListener('click', function() {
+                var overlay = this.closest('.eap-logger-modal-overlay');
+                if (overlay) {
+                    overlay.classList.add('hidden');
                 }
             });
         });
 
-        // Clear logs modal
-        const clearLogsBtn = document.getElementById('clear-logs-btn');
-        const clearModal = document.getElementById('clear-modal');
-        const modalBackdrop = clearModal?.querySelector('.eap-modal__backdrop');
-        const modalClose = clearModal?.querySelector('.eap-modal__close');
-
-        if (clearLogsBtn && clearModal) {
-            clearLogsBtn.addEventListener('click', function() {
-                clearModal.style.display = 'flex';
-            });
-
-            if (modalBackdrop) {
-                modalBackdrop.addEventListener('click', closeModal);
-            }
-            if (modalClose) {
-                modalClose.addEventListener('click', closeModal);
-            }
-        }
-
-        function closeModal() {
-            if (clearModal) {
-                clearModal.style.display = 'none';
-            }
-        }
-
-        // Make closeModal available globally for inline onclick (backwards compat)
-        window.closeModal = closeModal;
-    }
-
-    /**
-     * Initialize PHP errors page
-     */
-    function initPhpErrors() {
-        const scrollBottomBtn = document.getElementById('scroll-bottom');
-        const viewer = document.getElementById('errors-viewer');
-
-        if (scrollBottomBtn && viewer) {
-            scrollBottomBtn.addEventListener('click', function() {
-                viewer.scrollTop = viewer.scrollHeight;
-            });
-        }
-
-        // Auto-scroll to bottom on load
-        if (viewer) {
-            viewer.scrollTop = viewer.scrollHeight;
-        }
-    }
-
-    /**
-     * Initialize file viewer page
-     */
-    function initFileViewer() {
-        const viewer = document.getElementById('log-viewer');
-        const content = document.getElementById('log-content');
-        const searchInput = document.getElementById('log-search');
-        const searchResults = document.getElementById('search-results');
-        const scrollTopBtn = document.getElementById('scroll-top');
-        const scrollBottomBtn = document.getElementById('scroll-bottom');
-        const toggleWrapBtn = document.getElementById('toggle-wrap');
-
-        if (!viewer || !content) return;
-
-        const originalContent = content.textContent;
-
-        // Scroll buttons
-        if (scrollTopBtn) {
-            scrollTopBtn.addEventListener('click', () => {
-                viewer.scrollTop = 0;
-            });
-        }
-
-        if (scrollBottomBtn) {
-            scrollBottomBtn.addEventListener('click', () => {
-                viewer.scrollTop = viewer.scrollHeight;
-            });
-        }
-
-        // Toggle wrap
-        if (toggleWrapBtn) {
-            toggleWrapBtn.addEventListener('click', () => {
-                content.classList.toggle('wrap');
-            });
-        }
-
-        // Search functionality
-        if (searchInput && searchResults) {
-            let searchTimeout;
-            searchInput.addEventListener('input', function() {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => {
-                    const query = this.value.trim().toLowerCase();
-
-                    if (!query) {
-                        content.innerHTML = escapeHtml(originalContent);
-                        searchResults.textContent = '';
-                        return;
-                    }
-
-                    const lines = originalContent.split('\n');
-                    let matchCount = 0;
-                    const highlighted = lines.map(line => {
-                        const lowerLine = line.toLowerCase();
-                        if (lowerLine.includes(query)) {
-                            matchCount++;
-                            const escaped = escapeHtml(line);
-                            const regex = new RegExp('(' + escapeRegex(escapeHtml(query)) + ')', 'gi');
-                            return escaped.replace(regex, '<span class="highlight">$1</span>');
-                        }
-                        return escapeHtml(line);
-                    });
-
-                    content.innerHTML = highlighted.join('\n');
-                    searchResults.textContent = matchCount > 0 ? `${matchCount} matches` : 'No matches';
-                }, 200);
-            });
-        }
-
-        // Auto-scroll to bottom on load
-        viewer.scrollTop = viewer.scrollHeight;
-    }
-
-    /**
-     * Initialize channels configuration page
-     */
-    function initChannelsPage() {
-        const addChannelBtn = document.querySelector('[data-action="add-channel"]');
-        const modal = document.getElementById('add-channel-modal');
-
-        if (addChannelBtn && modal) {
-            addChannelBtn.addEventListener('click', () => {
-                resetChannelModal();
-                modal.showModal();
-            });
-        }
-
-        // Edit channel buttons
-        document.querySelectorAll('[data-action="edit-channel"]').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const channel = this.dataset.channel;
-                const level = this.dataset.level;
-                const enabled = this.dataset.enabled === 'true';
-                const description = this.dataset.description || '';
-
-                editChannel(channel, level, enabled, description);
+        // Click on overlay background
+        document.querySelectorAll('.eap-logger-modal-overlay').forEach(function(overlay) {
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) {
+                    overlay.classList.add('hidden');
+                }
             });
         });
 
-        function editChannel(channel, level, enabled, description) {
-            const modalTitle = document.getElementById('modal-title');
-            const channelName = document.getElementById('channel-name');
-            const channelLevel = document.getElementById('channel-level');
-            const channelEnabled = document.getElementById('channel-enabled');
-            const channelDesc = document.getElementById('channel-desc');
-
-            if (modalTitle) modalTitle.textContent = 'Edit Channel';
-            if (channelName) {
-                channelName.value = channel;
-                channelName.readOnly = true;
+        // Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.eap-logger-modal-overlay').forEach(function(m) {
+                    m.classList.add('hidden');
+                });
             }
-            if (channelLevel) channelLevel.value = level;
-            if (channelEnabled) channelEnabled.checked = enabled;
-            if (channelDesc) channelDesc.value = description;
-
-            if (modal) modal.showModal();
-        }
-
-        function resetChannelModal() {
-            const modalTitle = document.getElementById('modal-title');
-            const channelName = document.getElementById('channel-name');
-            const channelLevel = document.getElementById('channel-level');
-            const channelEnabled = document.getElementById('channel-enabled');
-            const channelDesc = document.getElementById('channel-desc');
-
-            if (modalTitle) modalTitle.textContent = 'Add Channel';
-            if (channelName) {
-                channelName.value = '';
-                channelName.readOnly = false;
-            }
-            if (channelLevel) channelLevel.value = 'info';
-            if (channelEnabled) channelEnabled.checked = true;
-            if (channelDesc) channelDesc.value = '';
-        }
-
-        // Make editChannel available globally for backwards compat
-        window.editChannel = editChannel;
+        });
     }
 
-    /**
-     * Show notification toast
-     */
-    function showNotification(message, type = 'info') {
-        // Remove existing notifications
-        document.querySelectorAll('.eap-toast').forEach(el => el.remove());
+    // ==========================================================================
+    // Telegram Configuration Page
+    // ==========================================================================
 
-        const toast = document.createElement('div');
-        toast.className = `eap-toast eap-toast--${type}`;
-        toast.textContent = message;
-        toast.style.cssText = `
-            position: fixed;
-            bottom: 1rem;
-            right: 1rem;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.375rem;
-            font-size: 0.875rem;
-            z-index: 9999;
-            animation: slideIn 0.3s ease;
-        `;
+    function initTelegramConfig() {
+        var enabledCheckbox = document.getElementById('telegram-enabled');
+        var settingsDiv = document.getElementById('telegram-settings');
+        var notifyAllCheckbox = document.getElementById('notify-all');
+        var channelCheckboxes = document.querySelectorAll('.eap-logger-channel-checkbox__input');
+        var testBtn = document.getElementById('test-btn');
+        var testResult = document.getElementById('test-result');
 
-        if (type === 'success') {
-            toast.style.background = 'var(--eap-neon-green)';
-            toast.style.color = 'var(--eap-void)';
-        } else if (type === 'error') {
-            toast.style.background = '#ef4444';
-            toast.style.color = 'white';
-        } else {
-            toast.style.background = 'var(--eap-surface)';
-            toast.style.color = 'var(--eap-text)';
-            toast.style.border = '1px solid var(--eap-border)';
+        if (!enabledCheckbox) {
+            return;
         }
 
-        document.body.appendChild(toast);
+        // Toggle settings visibility
+        enabledCheckbox.addEventListener('change', function() {
+            if (settingsDiv) {
+                settingsDiv.style.display = this.checked ? 'block' : 'none';
+            }
+        });
 
-        setTimeout(() => {
-            toast.style.animation = 'slideOut 0.3s ease';
-            setTimeout(() => toast.remove(), 300);
+        // Toggle channel checkboxes
+        if (notifyAllCheckbox) {
+            notifyAllCheckbox.addEventListener('change', function() {
+                var labels = document.querySelectorAll('#channel-list .eap-logger-channel-checkbox');
+                labels.forEach(function(label) {
+                    label.classList.toggle('eap-logger-channel-checkbox--disabled', notifyAllCheckbox.checked);
+                });
+                channelCheckboxes.forEach(function(cb) {
+                    cb.disabled = notifyAllCheckbox.checked;
+                    if (notifyAllCheckbox.checked) cb.checked = false;
+                });
+            });
+        }
+
+        // Test connection
+        if (testBtn) {
+            testBtn.addEventListener('click', function() {
+                var botToken = document.getElementById('bot-token');
+                var chatId = document.getElementById('chat-id');
+
+                if (!botToken || !chatId || !botToken.value || !chatId.value) {
+                    showTestResult(false, 'Please enter bot token and chat ID first');
+                    return;
+                }
+
+                testBtn.disabled = true;
+                testBtn.textContent = 'Testing...';
+
+                var formData = new FormData();
+                formData.append('_csrf_token', csrfToken);
+                formData.append('bot_token', botToken.value);
+                formData.append('chat_id', chatId.value);
+
+                fetch(adminBasePath + '/logger/telegram/test', {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: formData
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    showTestResult(data.success, data.message || (data.success ? 'Test message sent!' : 'Failed'));
+                })
+                .catch(function(err) {
+                    showTestResult(false, 'Network error: ' + err.message);
+                })
+                .finally(function() {
+                    testBtn.disabled = false;
+                    testBtn.textContent = 'Test Connection';
+                });
+            });
+        }
+
+        function showTestResult(success, message) {
+            if (!testResult) return;
+            testResult.className = 'eap-logger-test-result show ' + (success ? 'eap-logger-test-result--success' : 'eap-logger-test-result--error');
+            testResult.textContent = message;
+        }
+    }
+
+    // ==========================================================================
+    // Toast Notifications
+    // ==========================================================================
+
+    function showToast(message, type) {
+        var toast = document.createElement('div');
+        toast.className = 'eap-logger-toast eap-logger-toast--' + type;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(function() {
+            toast.remove();
         }, 3000);
     }
 
-    /**
-     * Helper: Escape HTML
-     */
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+    // ==========================================================================
+    // Initialize
+    // ==========================================================================
 
-    /**
-     * Helper: Escape regex special characters
-     */
-    function escapeRegex(string) {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-    /**
-     * Apply dynamic channel colors from data attributes
-     */
-    function applyChannelColors() {
-        document.querySelectorAll('.eap-channel-card[data-channel-bg]').forEach(card => {
-            const bg = card.dataset.channelBg;
-            const text = card.dataset.channelText;
-            if (bg) card.style.setProperty('--channel-bg', bg);
-            if (text) card.style.setProperty('--channel-text', text);
-        });
-    }
-
-    /**
-     * Auto-initialize based on page
-     */
     function init() {
-        // Apply dynamic channel colors
-        applyChannelColors();
-        // Dashboard page
-        if (document.querySelector('.channel-toggle')) {
-            initDashboard();
-        }
-
-        // Database logs page
-        if (document.querySelector('.toggle-context') || document.getElementById('clear-logs-btn')) {
-            initDatabaseLogs();
-        }
-
-        // PHP errors page
-        if (document.getElementById('errors-viewer')) {
-            initPhpErrors();
-        }
-
-        // File viewer page
-        if (document.getElementById('log-viewer')) {
-            initFileViewer();
-        }
-
-        // Channels configuration page
-        if (document.getElementById('add-channel-modal')) {
-            initChannelsPage();
-        }
+        initChannelManagement();
+        initLogManagement();
+        initContextModal();
+        initClearModal();
+        initModalCloseHandlers();
+        initTelegramConfig();
     }
 
-    /**
-     * Initialize modal close buttons and confirm dialogs
-     */
-    function initModalAndConfirm() {
-        // Modal close buttons
-        document.querySelectorAll('.eap-modal__close, .eap-modal__cancel').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const modal = this.closest('.eap-modal');
-                if (modal) {
-                    if (modal.tagName === 'DIALOG') {
-                        modal.close();
-                    } else {
-                        modal.hidden = true;
-                    }
-                }
-            });
-        });
-
-        // Modal backdrop click to close
-        document.querySelectorAll('.eap-modal__backdrop').forEach(backdrop => {
-            backdrop.addEventListener('click', function() {
-                const modal = this.closest('.eap-modal');
-                if (modal) modal.hidden = true;
-            });
-        });
-
-        // Confirm dialogs on buttons
-        document.querySelectorAll('[data-confirm]').forEach(btn => {
-            btn.addEventListener('click', function(e) {
-                if (!confirm(this.dataset.confirm)) {
-                    e.preventDefault();
-                }
-            });
-        });
-
-        // Open modal buttons
-        document.querySelectorAll('[id$="-btn"]').forEach(btn => {
-            const modalId = btn.id.replace('-btn', '-modal');
-            const modal = document.getElementById(modalId);
-            if (modal) {
-                btn.addEventListener('click', () => {
-                    if (modal.tagName === 'DIALOG') {
-                        modal.showModal();
-                    } else {
-                        modal.hidden = false;
-                    }
-                });
-            }
-        });
-    }
-
-    // Initialize when DOM is ready
+    // Run on DOMContentLoaded or immediately if already loaded
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            init();
-            initModalAndConfirm();
-        });
+        document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
-        initModalAndConfirm();
     }
-
-    // Add CSS animation keyframes
-    const style = document.createElement('style');
-    style.textContent = `
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-            from { transform: translateX(0); opacity: 1; }
-            to { transform: translateX(100%); opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
-
 })();
