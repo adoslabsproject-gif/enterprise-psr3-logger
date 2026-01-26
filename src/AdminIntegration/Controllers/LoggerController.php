@@ -226,7 +226,7 @@ final class LoggerController extends BaseController
             $params = [];
 
             if ($channel) {
-                $sql .= " AND channel = ?";
+                $sql .= ' AND channel = ?';
                 $params[] = $channel;
             }
 
@@ -320,8 +320,8 @@ final class LoggerController extends BaseController
         try {
             $message = "🔔 *Test Message*\n\n";
             $message .= "Enterprise Logger connected successfully!\n";
-            $message .= "Time: " . date('Y-m-d H:i:s') . "\n";
-            $message .= "Server: " . gethostname();
+            $message .= 'Time: ' . date('Y-m-d H:i:s') . "\n";
+            $message .= 'Server: ' . gethostname();
 
             $result = $this->sendTelegramMessage($botToken, $chatId, $message);
 
@@ -516,6 +516,7 @@ final class LoggerController extends BaseController
         try {
             $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM logs WHERE {$whereClause}");
             $stmt->execute($params);
+
             return (int) $stmt->fetchColumn();
         } catch (\Exception $e) {
             return 0;
@@ -525,7 +526,8 @@ final class LoggerController extends BaseController
     private function getAvailableChannels(): array
     {
         try {
-            $stmt = $this->pdo->query("SELECT DISTINCT channel FROM logs ORDER BY channel");
+            $stmt = $this->pdo->query('SELECT DISTINCT channel FROM logs ORDER BY channel');
+
             return $stmt->fetchAll(PDO::FETCH_COLUMN);
         } catch (\Exception $e) {
             return [];
@@ -535,9 +537,10 @@ final class LoggerController extends BaseController
     private function getSetting(string $key, string $default = ''): string
     {
         try {
-            $stmt = $this->pdo->prepare("SELECT setting_value FROM admin_settings WHERE setting_key = ?");
+            $stmt = $this->pdo->prepare('SELECT setting_value FROM admin_settings WHERE setting_key = ?');
             $stmt->execute([$key]);
             $result = $stmt->fetchColumn();
+
             return $result !== false ? $result : $default;
         } catch (\Exception $e) {
             return $default;
@@ -546,13 +549,13 @@ final class LoggerController extends BaseController
 
     private function saveSetting(string $key, string $value): void
     {
-        $stmt = $this->pdo->prepare("
+        $stmt = $this->pdo->prepare('
             INSERT INTO admin_settings (setting_key, setting_value, updated_at)
             VALUES (?, ?, NOW())
             ON CONFLICT (setting_key) DO UPDATE SET
                 setting_value = EXCLUDED.setting_value,
                 updated_at = NOW()
-        ");
+        ');
         $stmt->execute([$key, $value]);
     }
 

@@ -20,7 +20,6 @@
  * @var string $csrf_input CSRF hidden input
  * @var string $csrf_token CSRF token value
  */
-
 $getLevelColor = function ($level) {
     return match(strtolower($level)) {
         'emergency', 'alert', 'critical' => 'danger',
@@ -59,6 +58,7 @@ $getIcon = function ($icon) {
         'layers' => '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
         'zap' => '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
     ];
+
     return $icons[$icon] ?? $icons['box'];
 };
 ?>
@@ -73,7 +73,7 @@ $getIcon = function ($icon) {
     <div class="eap-section">
         <div class="eap-section__header">
             <h2 class="eap-section__title">Log Channels</h2>
-            <span class="eap-badge eap-badge--info"><?= count(array_filter($channels, fn($c) => $c['enabled'])) ?> / <?= count($channels) ?> active</span>
+            <span class="eap-badge eap-badge--info"><?= count(array_filter($channels, fn ($c) => $c['enabled'])) ?> / <?= count($channels) ?> active</span>
         </div>
 
         <div class="eap-grid eap-grid--4" style="gap: 16px;">
@@ -270,8 +270,8 @@ $getIcon = function ($icon) {
 
                 <?php
                 $start = max(1, $page - 2);
-                $end = min($pages, $page + 2);
-                for ($i = $start; $i <= $end; $i++):
+            $end = min($pages, $page + 2);
+            for ($i = $start; $i <= $end; $i++):
                 ?>
                 <a href="?<?= http_build_query(array_merge($filters, ['page' => $i])) ?>"
                    class="eap-btn eap-btn--sm <?= $i === $page ? 'eap-btn--primary' : 'eap-btn--secondary' ?>">
