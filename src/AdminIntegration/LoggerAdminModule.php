@@ -172,8 +172,8 @@ final class LoggerAdminModule implements AdminModuleInterface
         // Run migration to create config entries
         $this->runMigration();
 
-        // Publish assets to admin panel public folder
-        $this->publishAssets();
+        // Assets are served directly from vendor via /module-assets/ route
+        // No need to copy files
 
         $this->logger->info('PSR3 Logger admin module installed');
     }
@@ -217,81 +217,6 @@ final class LoggerAdminModule implements AdminModuleInterface
             'logger.clear',
             'logger.download',
         ];
-    }
-
-    /**
-     * Publish module assets to admin panel public folder
-     *
-     * Copies CSS and JS files to /public/modules/psr3-logger/
-     * so they can be served statically.
-     */
-    private function publishAssets(): void
-    {
-        $sourceDir = dirname(__DIR__, 2) . '/public';
-        $targetDir = $this->findAdminPanelPublicDir() . '/modules/psr3-logger';
-
-        if (!is_dir($sourceDir)) {
-            $this->logger->warning('Source assets directory not found', ['path' => $sourceDir]);
-
-            return;
-        }
-
-        // Create target directories
-        $targetCssDir = $targetDir . '/css';
-        $targetJsDir = $targetDir . '/js';
-
-        if (!is_dir($targetCssDir)) {
-            @mkdir($targetCssDir, 0o755, true);
-        }
-        if (!is_dir($targetJsDir)) {
-            @mkdir($targetJsDir, 0o755, true);
-        }
-
-        // Copy CSS files
-        foreach (glob($sourceDir . '/css/*.css') as $file) {
-            $dest = $targetCssDir . '/' . basename($file);
-            if (copy($file, $dest)) {
-                $this->logger->debug('Published CSS', ['file' => basename($file)]);
-            }
-        }
-
-        // Copy JS files
-        foreach (glob($sourceDir . '/js/*.js') as $file) {
-            $dest = $targetJsDir . '/' . basename($file);
-            if (copy($file, $dest)) {
-                $this->logger->debug('Published JS', ['file' => basename($file)]);
-            }
-        }
-
-        $this->logger->info('Assets published to ' . $targetDir);
-    }
-
-    /**
-     * Find the admin panel's public directory
-     */
-    private function findAdminPanelPublicDir(): string
-    {
-        // Method 1: Check DOCUMENT_ROOT
-        $docRoot = $_SERVER['DOCUMENT_ROOT'] ?? '';
-        if ($docRoot && is_dir($docRoot)) {
-            return $docRoot;
-        }
-
-        // Method 2: Look for admin-panel in vendor
-        $vendorPaths = [
-            dirname(__DIR__, 5) . '/public',           // Standard vendor location
-            dirname(__DIR__, 4) . '/public',           // If installed as workspace package
-            getcwd() . '/public',                      // Current working directory
-        ];
-
-        foreach ($vendorPaths as $path) {
-            if (is_dir($path)) {
-                return $path;
-            }
-        }
-
-        // Method 3: Fallback to current project public
-        return getcwd() . '/public';
     }
 
     /**

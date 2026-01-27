@@ -135,8 +135,8 @@ final class LoggerController extends BaseController
             'available_channels' => $availableChannels,
             'levels' => array_keys(self::LEVELS),
             'page_title' => 'Logging Dashboard',
-            'extra_styles' => ['/modules/psr3-logger/css/logger.css'],
-            'extra_scripts' => ['/modules/psr3-logger/js/logger.js'],
+            'extra_styles' => ['/module-assets/enterprise-psr3-logger/css/logger.css'],
+            'extra_scripts' => ['/module-assets/enterprise-psr3-logger/js/logger.js'],
         ]);
     }
 
@@ -265,8 +265,8 @@ final class LoggerController extends BaseController
             'channels' => self::CHANNELS,
             'levels' => array_keys(self::LEVELS),
             'page_title' => 'Telegram Notifications',
-            'extra_styles' => ['/modules/psr3-logger/css/logger.css'],
-            'extra_scripts' => ['/modules/psr3-logger/js/logger.js'],
+            'extra_styles' => ['/module-assets/enterprise-psr3-logger/css/logger.css'],
+            'extra_scripts' => ['/module-assets/enterprise-psr3-logger/js/logger.js'],
         ]);
     }
 
