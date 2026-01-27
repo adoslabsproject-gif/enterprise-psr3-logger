@@ -18,7 +18,6 @@
  * @var string $csrf_input CSRF hidden input
  * @var string $csrf_token CSRF token value
  */
-
 $getLevelBadgeClass = fn ($level) => match (strtolower($level)) {
     'emergency', 'alert', 'critical', 'error' => 'eap-badge--danger',
     'warning' => 'eap-badge--warning',
@@ -236,8 +235,8 @@ $getIcon = fn ($icon) => $icons[$icon] ?? $icons['box'];
 
             <?php
             $start = max(1, $page - 2);
-            $end = min($pages, $page + 2);
-            for ($i = $start; $i <= $end; $i++): ?>
+        $end = min($pages, $page + 2);
+        for ($i = $start; $i <= $end; $i++): ?>
             <a href="?<?= http_build_query(array_merge($filters, ['page' => $i])) ?>"
                class="eap-logger-pagination__link <?= $i === $page ? 'eap-logger-pagination__link--active' : '' ?>">
                 <?= $i ?>
