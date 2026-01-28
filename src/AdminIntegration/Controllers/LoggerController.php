@@ -81,8 +81,9 @@ final class LoggerController extends BaseController
         ],
     ];
 
-    private PDO $pdo;
     private string $logsPath;
+    private \PDO $pdo;
+    private ?\AdosLabs\AdminPanel\Database\Pool\PooledConnection $pooledConnection = null;
 
     public function __construct(
         DatabasePool $db,
@@ -90,8 +91,10 @@ final class LoggerController extends BaseController
         AuditService $auditService,
     ) {
         parent::__construct($db, $sessionService, $auditService);
-        $conn = $db->acquire();
-        $this->pdo = $conn->getPdo();
+
+        // Acquire connection from pool (will be released in destructor)
+        $this->pooledConnection = $db->acquire();
+        $this->pdo = $this->pooledConnection->getPdo();
 
         // Set logs path
         $projectRoot = defined('EAP_PROJECT_ROOT') ? EAP_PROJECT_ROOT : getcwd();
@@ -100,6 +103,17 @@ final class LoggerController extends BaseController
         // Ensure logs directory exists
         if (!is_dir($this->logsPath)) {
             @mkdir($this->logsPath, 0755, true);
+        }
+    }
+
+    /**
+     * Release the pooled connection when controller is destroyed
+     */
+    public function __destruct()
+    {
+        if ($this->pooledConnection !== null) {
+            $this->db->release($this->pooledConnection);
+            $this->pooledConnection = null;
         }
     }
 
