@@ -43,17 +43,21 @@ final class LoggerController extends BaseController
      */
     private const AUTO_RESET_HOURS = 8;
 
+    /**
+     * Channel definitions - must match database log_channels table
+     * These channels are configurable via the admin panel
+     */
     private const CHANNELS = [
-        'app' => [
-            'name' => 'Application',
-            'description' => 'General application logs, startup, config, user actions',
+        'default' => [
+            'name' => 'Default',
+            'description' => 'General application logs, uncategorized events',
             'icon' => 'box',
             'color' => 'blue',
-            'file_prefix' => 'app',
+            'file_prefix' => 'default',
         ],
         'security' => [
             'name' => 'Security',
-            'description' => 'Auth, login/logout, sessions, threats, 2FA (also in DB)',
+            'description' => 'Auth, login/logout, sessions, 2FA, threats (+ database)',
             'icon' => 'shield',
             'color' => 'purple',
             'file_prefix' => 'security',
@@ -65,13 +69,40 @@ final class LoggerController extends BaseController
             'color' => 'cyan',
             'file_prefix' => 'api',
         ],
+        'database' => [
+            'name' => 'Database',
+            'description' => 'Database queries, slow queries, connection pool',
+            'icon' => 'database',
+            'color' => 'green',
+            'file_prefix' => 'database',
+        ],
+        'email' => [
+            'name' => 'Email',
+            'description' => 'Email sending, SMTP errors, notifications',
+            'icon' => 'mail',
+            'color' => 'orange',
+            'file_prefix' => 'email',
+        ],
         'performance' => [
             'name' => 'Performance',
-            'description' => 'DB pool metrics, slow queries, cache stats, throughput',
+            'description' => 'Performance metrics, slow operations, throughput',
             'icon' => 'zap',
             'color' => 'yellow',
             'file_prefix' => 'performance',
         ],
+        'audit' => [
+            'name' => 'Audit',
+            'description' => 'User actions, config changes, admin operations',
+            'icon' => 'user',
+            'color' => 'gray',
+            'file_prefix' => 'audit',
+        ],
+    ];
+
+    /**
+     * Special channels (not in database, file-only)
+     */
+    private const SPECIAL_CHANNELS = [
         'php_errors' => [
             'name' => 'PHP Errors',
             'description' => 'PHP runtime errors, warnings, notices, deprecations',
@@ -707,20 +738,24 @@ final class LoggerController extends BaseController
         try {
             $stmt = $this->pdo->query('SELECT channel, min_level, enabled, auto_reset_enabled, auto_reset_at FROM log_channels');
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                // PostgreSQL returns 't'/'f' for boolean, normalize to bool
+                $row['enabled'] = $row['enabled'] === true || $row['enabled'] === 't' || $row['enabled'] === '1';
+                $row['auto_reset_enabled'] = $row['auto_reset_enabled'] === true || $row['auto_reset_enabled'] === 't' || $row['auto_reset_enabled'] === '1';
                 $dbChannels[$row['channel']] = $row;
             }
         } catch (\Exception $e) {
-            // Table might not exist yet
+            // Table might not exist yet, use defaults
         }
 
+        // Build channel list from database config merged with static metadata
         foreach (self::CHANNELS as $key => $meta) {
             $dbConfig = $dbChannels[$key] ?? null;
 
             $channels[$key] = array_merge($meta, [
                 'key' => $key,
-                'enabled' => $dbConfig ? (bool) $dbConfig['enabled'] : true,
+                'enabled' => $dbConfig !== null ? $dbConfig['enabled'] : true,
                 'level' => $dbConfig['min_level'] ?? 'warning',  // Default to WARNING (safe)
-                'auto_reset_enabled' => $dbConfig ? (bool) $dbConfig['auto_reset_enabled'] : true,  // Default ON
+                'auto_reset_enabled' => $dbConfig !== null ? $dbConfig['auto_reset_enabled'] : true,  // Default ON
                 'auto_reset_at' => $dbConfig['auto_reset_at'] ?? null,
             ]);
         }
@@ -773,7 +808,7 @@ final class LoggerController extends BaseController
                 'size_human' => $this->formatBytes($size),
                 'modified' => $modified,
                 'modified_human' => date('Y-m-d H:i:s', $modified),
-                'color' => self::CHANNELS[$channel]['color'] ?? 'gray',
+                'color' => self::CHANNELS[$channel]['color'] ?? self::SPECIAL_CHANNELS[$channel]['color'] ?? 'gray',
             ];
         }
 
