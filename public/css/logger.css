@@ -1903,3 +1903,47 @@
 .eap-logger-path-info + .eap-logger-path-info {
     margin-top: 8px;
 }
+
+/* ==========================================================================
+   Password Toggle Button
+   ========================================================================== */
+
+.eap-input-password-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.eap-input-password-wrapper input {
+    flex: 1;
+    padding-right: 44px;
+}
+
+.eap-input-password-toggle {
+    position: absolute;
+    right: 8px;
+    background: none;
+    border: none;
+    padding: 6px;
+    cursor: pointer;
+    color: var(--eap-text-muted, #7d8590);
+    border-radius: 4px;
+    transition: color 0.2s, background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.eap-input-password-toggle:hover {
+    color: var(--eap-text, #e6edf3);
+    background-color: var(--eap-surface-hover, #30363d);
+}
+
+.eap-input-password-toggle:focus {
+    outline: 2px solid var(--eap-neon-cyan, #00d4ff);
+    outline-offset: 1px;
+}
+
+.eap-input-password-toggle .hidden {
+    display: none;
+}

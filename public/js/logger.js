@@ -765,6 +765,35 @@
     // Initialize
     // ==========================================================================
 
+    /**
+     * Initialize password visibility toggles
+     */
+    function initPasswordToggles() {
+        var toggleButtons = document.querySelectorAll('.eap-input-password-toggle');
+
+        toggleButtons.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var targetId = btn.getAttribute('data-target');
+                var input = document.getElementById(targetId);
+
+                if (!input) return;
+
+                var eyeIcon = btn.querySelector('.eap-icon-eye');
+                var eyeOffIcon = btn.querySelector('.eap-icon-eye-off');
+
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    if (eyeIcon) eyeIcon.classList.add('hidden');
+                    if (eyeOffIcon) eyeOffIcon.classList.remove('hidden');
+                } else {
+                    input.type = 'password';
+                    if (eyeIcon) eyeIcon.classList.remove('hidden');
+                    if (eyeOffIcon) eyeOffIcon.classList.add('hidden');
+                }
+            });
+        });
+    }
+
     function init() {
         initAutoResetToggles();
         initChannelManagement();
@@ -776,6 +805,7 @@
         initTelegramConfig();
         initPhpErrorsClearForm();
         initBulkActions();
+        initPasswordToggles();
     }
 
     // Run on DOMContentLoaded or immediately if already loaded
