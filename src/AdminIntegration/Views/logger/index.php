@@ -72,7 +72,8 @@ $debugLevels = ['debug', 'info', 'notice'];
 <!-- Channel Cards Grid -->
 <div class="eap-logger-channel-grid">
     <?php foreach ($channels as $key => $channel):
-        $isDebugLevel = in_array($channel['level'], $debugLevels);
+        $channelLevel = strtolower($channel['level'] ?? 'warning');
+        $isDebugLevel = in_array($channelLevel, $debugLevels);
         $autoResetAt = $channel['auto_reset_at'] ?? null;
         $hasAutoReset = $isDebugLevel && $autoResetAt;
         $timeRemaining = $hasAutoReset ? max(0, strtotime($autoResetAt) - time()) : 0;

@@ -1376,10 +1376,11 @@ final class LoggerController extends BaseController
                 continue;
             }
 
-            // If it's a non-empty line that doesn't match any pattern, treat as continuation
-            if ($currentEntry !== null) {
-                $trimmedLine = trim($line);
+            // If it's a non-empty line that doesn't match any pattern
+            $trimmedLine = trim($line);
 
+            if ($currentEntry !== null) {
+                // Treat as continuation of current entry
                 // If current entry has no message yet, this line might be the message
                 if (empty($currentEntry['message'])) {
                     // Check if line has context (separated by |)
@@ -1398,6 +1399,19 @@ final class LoggerController extends BaseController
                     // Already have a message, this is additional context
                     $detailLines[] = $trimmedLine;
                 }
+            } elseif ($trimmedLine !== '') {
+                // Orphan line that doesn't match any format - create raw entry
+                // This ensures no lines are silently lost
+                $currentEntry = [
+                    'raw' => $line,
+                    'timestamp' => null,
+                    'channel' => 'unknown',
+                    'level' => 'info',
+                    'message' => $trimmedLine,
+                    'context' => null,
+                    'details' => [],
+                    'level_class' => 'secondary',
+                ];
             }
         }
 
