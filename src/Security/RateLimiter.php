@@ -25,7 +25,10 @@ final class RateLimiter
     ];
 
     private ?\Redis $redis = null;
+
+    /** @var array<string, array<int>> */
     private array $localCache = [];
+
     private string $prefix = 'eap_rate:';
 
     public function __construct()
@@ -165,12 +168,19 @@ final class RateLimiter
 
     /**
      * Check rate limit using Redis (sliding window)
+     *
+     * @return array{allowed: bool, remaining: int, reset_at: int, retry_after: int|null}
      */
     private function checkRedis(string $key, int $maxRequests, int $windowSeconds, int $now, int $windowStart): array
     {
+        $redis = $this->redis;
+        if ($redis === null) {
+            return $this->checkLocal($key, $maxRequests, $windowSeconds, $now, $windowStart);
+        }
+
         // Remove old entries and count current window
-        $this->redis->zRemRangeByScore($key, '-inf', (string) $windowStart);
-        $count = $this->redis->zCard($key);
+        $redis->zRemRangeByScore($key, '-inf', (string) $windowStart);
+        $count = (int) $redis->zCard($key);
 
         $allowed = $count < $maxRequests;
         $remaining = max(0, $maxRequests - $count);
@@ -179,8 +189,8 @@ final class RateLimiter
         // Get oldest entry to calculate retry_after
         $retryAfter = null;
         if (!$allowed) {
-            $oldest = $this->redis->zRange($key, 0, 0, true);
-            if (!empty($oldest)) {
+            $oldest = $redis->zRange($key, 0, 0, true);
+            if (is_array($oldest) && !empty($oldest)) {
                 $oldestTime = (int) reset($oldest);
                 $retryAfter = max(1, ($oldestTime + $windowSeconds) - $now);
             }
@@ -199,13 +209,22 @@ final class RateLimiter
      */
     private function hitRedis(string $key, int $windowSeconds, int $now): void
     {
+        $redis = $this->redis;
+        if ($redis === null) {
+            $this->hitLocal($key, $now);
+
+            return;
+        }
+
         // Add current timestamp to sorted set
-        $this->redis->zAdd($key, $now, (string) $now . '.' . mt_rand());
-        $this->redis->expire($key, $windowSeconds + 1);
+        $redis->zAdd($key, $now, (string) $now . '.' . mt_rand());
+        $redis->expire($key, $windowSeconds + 1);
     }
 
     /**
      * Check rate limit using local memory (fallback)
+     *
+     * @return array{allowed: bool, remaining: int, reset_at: int, retry_after: int|null}
      */
     private function checkLocal(string $key, int $maxRequests, int $windowSeconds, int $now, int $windowStart): array
     {
@@ -213,7 +232,7 @@ final class RateLimiter
         if (isset($this->localCache[$key])) {
             $this->localCache[$key] = array_filter(
                 $this->localCache[$key],
-                fn ($timestamp) => $timestamp > $windowStart
+                fn ($timestamp) => $timestamp > $windowStart,
             );
         }
 

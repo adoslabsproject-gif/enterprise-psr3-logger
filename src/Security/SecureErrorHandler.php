@@ -200,7 +200,7 @@ final class SecureErrorHandler
                 $context,
                 $e->getMessage(),
                 $e->getFile(),
-                $e->getLine()
+                $e->getLine(),
             ));
         }
     }

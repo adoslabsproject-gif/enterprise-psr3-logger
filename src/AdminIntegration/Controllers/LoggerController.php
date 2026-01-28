@@ -198,7 +198,7 @@ final class LoggerController extends BaseController
         // Configuration from environment
         $this->allowSystemLogs = filter_var(
             $_ENV['LOG_ALLOW_SYSTEM_LOGS'] ?? getenv('LOG_ALLOW_SYSTEM_LOGS') ?: 'false',
-            FILTER_VALIDATE_BOOLEAN
+            FILTER_VALIDATE_BOOLEAN,
         );
 
         $this->autoResetHours = (int) ($_ENV['LOG_AUTO_RESET_HOURS'] ?? getenv('LOG_AUTO_RESET_HOURS') ?: self::DEFAULT_AUTO_RESET_HOURS);

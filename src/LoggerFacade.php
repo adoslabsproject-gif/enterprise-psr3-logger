@@ -165,7 +165,6 @@ class LoggerFacade
         self::getLogger('performance')->log($level, $message, $context);
     }
 
-
     /**
      * Log to 'js_errors' channel (JavaScript frontend errors)
      *

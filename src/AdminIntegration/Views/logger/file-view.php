@@ -177,32 +177,32 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
                     // Combine context data for inline display (metadata already shown in header)
                     $allContext = $contextData; // Already filtered above
 
-                    // Add context if it's not already in details
-                    if ($line['context'] && empty($contextData)) {
-                        // Try to decode JSON context
-                        $jsonContextData = json_decode($line['context'], true);
-                        if ($jsonContextData !== null && is_array($jsonContextData)) {
-                            // Format as key=value pairs
-                            foreach ($jsonContextData as $key => $value) {
-                                if (is_scalar($value)) {
-                                    $allContext[] = $key . '=' . $value;
-                                } elseif (is_array($value)) {
-                                    $allContext[] = $key . '=' . json_encode($value, JSON_UNESCAPED_SLASHES);
-                                } else {
-                                    $allContext[] = $key . '=' . (string)$value;
-                                }
+                // Add context if it's not already in details
+                if ($line['context'] && empty($contextData)) {
+                    // Try to decode JSON context
+                    $jsonContextData = json_decode($line['context'], true);
+                    if ($jsonContextData !== null && is_array($jsonContextData)) {
+                        // Format as key=value pairs
+                        foreach ($jsonContextData as $key => $value) {
+                            if (is_scalar($value)) {
+                                $allContext[] = $key . '=' . $value;
+                            } elseif (is_array($value)) {
+                                $allContext[] = $key . '=' . json_encode($value, JSON_UNESCAPED_SLASHES);
+                            } else {
+                                $allContext[] = $key . '=' . (string) $value;
                             }
-                        } else {
-                            // Plain text context - split by newlines or show as-is
-                            $contextLines = preg_split('/\r?\n/', $line['context']);
-                            foreach ($contextLines as $ctxLine) {
-                                if (trim($ctxLine) !== '') {
-                                    $allContext[] = trim($ctxLine);
-                                }
+                        }
+                    } else {
+                        // Plain text context - split by newlines or show as-is
+                        $contextLines = preg_split('/\r?\n/', $line['context']);
+                        foreach ($contextLines as $ctxLine) {
+                            if (trim($ctxLine) !== '') {
+                                $allContext[] = trim($ctxLine);
                             }
                         }
                     }
-                    ?>
+                }
+                ?>
 
                     <?php if (!empty($allContext)): ?>
                     <div class="eap-logger-entry__context-data">
@@ -212,9 +212,13 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
                             // Check if it's an exception line
                             $isException = str_contains($ctxItem, 'Exception') || str_contains($ctxItem, 'Error in ');
                             $class = 'eap-logger-entry__context-line';
-                            if ($isStack) $class .= ' eap-logger-entry__context-line--stack';
-                            if ($isException) $class .= ' eap-logger-entry__context-line--exception';
-                        ?>
+                            if ($isStack) {
+                                $class .= ' eap-logger-entry__context-line--stack';
+                            }
+                            if ($isException) {
+                                $class .= ' eap-logger-entry__context-line--exception';
+                            }
+                            ?>
                         <div class="<?= $class ?>"><?= htmlspecialchars($ctxItem) ?></div>
                         <?php endforeach; ?>
                     </div>
