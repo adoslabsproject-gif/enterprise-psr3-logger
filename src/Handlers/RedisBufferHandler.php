@@ -53,10 +53,6 @@ class RedisBufferHandler extends AbstractProcessingHandler
      */
     private const DEFAULT_MAX_QUEUE_SIZE = 100000;
 
-    /**
-     * Warning threshold as percentage of max queue size
-     */
-    private const WARNING_THRESHOLD_PERCENT = 80;
 
     /**
      * Trim check interval (every N writes)
@@ -286,8 +282,8 @@ class RedisBufferHandler extends AbstractProcessingHandler
                 'app' => $this->appName,
             ];
 
-            // Include request ID if available (avoid duplication if already in context)
-            if (isset($record->context['request_id']) && !isset($entry['_meta']['request_id'])) {
+            // Include request ID if available in context
+            if (isset($record->context['request_id'])) {
                 $entry['_meta']['request_id'] = $record->context['request_id'];
             }
         }
@@ -317,8 +313,9 @@ class RedisBufferHandler extends AbstractProcessingHandler
     private function trimQueueIfNeeded(): void
     {
         try {
-            $size = $this->redis->lLen($this->queueKey);
-            $this->cachedQueueSize = (int) $size;
+            $sizeResult = $this->redis->lLen($this->queueKey);
+            $size = is_int($sizeResult) ? $sizeResult : 0;
+            $this->cachedQueueSize = $size;
             $this->lastSizeCheck = time();
 
             // Trim with margin to avoid constant trimming

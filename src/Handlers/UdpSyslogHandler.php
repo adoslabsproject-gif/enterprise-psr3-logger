@@ -72,8 +72,8 @@ class UdpSyslogHandler extends AbstractProcessingHandler
     private int $facility;
     private ?string $hostname;
 
-    /** @var resource|null UDP socket */
-    private $socket = null;
+    /** @var \Socket|null UDP socket */
+    private ?\Socket $socket = null;
 
     /** @var int Maximum message size (RFC 5424: 2048 bytes recommended) */
     private int $maxMessageSize = 2048;
@@ -293,6 +293,8 @@ class UdpSyslogHandler extends AbstractProcessingHandler
 
     /**
      * Format context as RFC 5424 structured data
+     *
+     * @param array<string, mixed> $context
      */
     private function formatStructuredData(array $context): string
     {
