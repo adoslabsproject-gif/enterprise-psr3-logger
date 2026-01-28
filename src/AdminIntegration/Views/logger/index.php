@@ -157,12 +157,11 @@ $debugLevels = ['debug', 'info', 'notice'];
             </div>
         </div>
 
-        <!-- Auto-Reset Toggle (only shown for debug levels < WARNING) -->
+        <!-- Auto-Reset Toggle (shown for debug levels < WARNING, hidden otherwise) -->
         <?php
             $autoResetEnabled = $channel['auto_reset_enabled'] ?? true; // Default ON
         ?>
-        <?php if ($isDebugLevel): ?>
-        <div class="eap-logger-channel-card__auto-reset-toggle">
+        <div class="eap-logger-channel-card__auto-reset-toggle <?= !$isDebugLevel ? 'hidden' : '' ?>">
             <label class="eap-logger-auto-reset-switch">
                 <input type="checkbox"
                        class="eap-logger-auto-reset-switch__input auto-reset-toggle"
@@ -182,23 +181,20 @@ $debugLevels = ['debug', 'info', 'notice'];
         </div>
 
         <!-- Auto-Reset Countdown (shown when level < WARNING and auto-reset is enabled) -->
-        <?php if ($hasAutoReset && $timeRemaining > 0 && $autoResetEnabled): ?>
-        <div class="eap-logger-channel-card__auto-reset-countdown" data-reset-timestamp="<?= strtotime($autoResetAt) ?>">
+        <div class="eap-logger-channel-card__auto-reset-countdown <?= !($hasAutoReset && $timeRemaining > 0 && $autoResetEnabled) ? 'hidden' : '' ?>" data-reset-timestamp="<?= $hasAutoReset ? strtotime($autoResetAt) : '' ?>">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <?= $getIcon('alert-triangle') ?>
             </svg>
-            <span>Resets to WARNING in <strong class="auto-reset-time"><?= $hoursRemaining ?>h <?= $minutesRemaining ?>m</strong></span>
+            <span>Resets to WARNING in <strong class="auto-reset-time"><?= $hasAutoReset ? "{$hoursRemaining}h {$minutesRemaining}m" : '' ?></strong></span>
         </div>
-        <?php endif; ?>
-        <?php else: ?>
+
         <!-- Level is already WARNING or above - no auto-reset needed -->
-        <div class="eap-logger-channel-card__auto-reset-info">
+        <div class="eap-logger-channel-card__auto-reset-info <?= $isDebugLevel ? 'hidden' : '' ?>">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <?= $getIcon('check') ?>
             </svg>
-            <span>Level is <?= ucfirst($channel['level']) ?> - no auto-reset needed</span>
+            <span class="auto-reset-info-text">Level is <?= ucfirst($channelLevel) ?> - no auto-reset needed</span>
         </div>
-        <?php endif; ?>
 
         <!-- Usage Examples -->
         <div class="eap-logger-channel-card__usage">

@@ -255,16 +255,42 @@
                 btn.classList.add('hidden');
                 btn.classList.remove('eap-btn--pulse');
 
-                // Update auto-reset countdown if needed
+                // Check if new level is a debug level (requires auto-reset)
+                var isDebugLevel = debugLevels.indexOf(level.toLowerCase()) !== -1;
+                var autoResetToggle = card.querySelector('.eap-logger-channel-card__auto-reset-toggle');
+                var autoResetInfo = card.querySelector('.eap-logger-channel-card__auto-reset-info');
                 var countdown = card.querySelector('.eap-logger-channel-card__auto-reset-countdown');
-                if (data.auto_reset_at && autoResetEnabled) {
+
+                // Toggle auto-reset section visibility based on level
+                if (isDebugLevel) {
+                    // Show auto-reset toggle, hide info
+                    if (autoResetToggle) autoResetToggle.classList.remove('hidden');
+                    if (autoResetInfo) autoResetInfo.classList.add('hidden');
+                    // Add debug mode class to card
+                    card.classList.add('eap-logger-channel-card--debug-mode');
+                } else {
+                    // Hide auto-reset toggle, show info
+                    if (autoResetToggle) autoResetToggle.classList.add('hidden');
+                    if (autoResetInfo) {
+                        autoResetInfo.classList.remove('hidden');
+                        // Update the info text with new level
+                        var infoText = autoResetInfo.querySelector('.auto-reset-info-text');
+                        if (infoText) {
+                            infoText.textContent = 'Level is ' + level.charAt(0).toUpperCase() + level.slice(1) + ' - no auto-reset needed';
+                        }
+                    }
+                    // Remove debug mode class from card
+                    card.classList.remove('eap-logger-channel-card--debug-mode');
+                    // Hide countdown since no auto-reset for warning+
+                    if (countdown) countdown.classList.add('hidden');
+                }
+
+                // Update auto-reset countdown if debug level and has reset time
+                if (isDebugLevel && data.auto_reset_at && autoResetEnabled) {
                     if (countdown) {
                         countdown.classList.remove('hidden');
                         countdown.dataset.resetTimestamp = new Date(data.auto_reset_at).getTime() / 1000;
                         updateSingleTimer(countdown);
-                    } else {
-                        // Create countdown element
-                        updateAutoResetDisplay(card, data.auto_reset_at);
                     }
                 } else if (countdown) {
                     countdown.classList.add('hidden');

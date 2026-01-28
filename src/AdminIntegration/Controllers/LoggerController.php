@@ -53,8 +53,9 @@ final class LoggerController extends BaseController
 
     /**
      * Default timezone (configurable via APP_TIMEZONE env)
+     * Using Europe/Rome as default since UTC is 1-2 hours behind
      */
-    private const DEFAULT_TIMEZONE = 'UTC';
+    private const DEFAULT_TIMEZONE = 'Europe/Rome';
 
     /**
      * Channel definitions - must match database log_channels table
