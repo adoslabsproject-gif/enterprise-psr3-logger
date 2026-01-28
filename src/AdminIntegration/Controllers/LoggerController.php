@@ -143,6 +143,13 @@ final class LoggerController extends BaseController
             'color' => 'gray',
             'file_prefix' => 'php-fpm',
         ],
+        'nginx' => [
+            'name' => 'Nginx',
+            'description' => 'Nginx web server access and error logs',
+            'icon' => 'server',
+            'color' => 'green',
+            'file_prefix' => 'nginx',
+        ],
     ];
 
     private string $logsPath;
@@ -1047,6 +1054,8 @@ final class LoggerController extends BaseController
                 $channel = 'php_errors';
             } elseif (str_starts_with($file, 'php-fpm')) {
                 $channel = 'php-fpm';
+            } elseif (str_starts_with($file, 'nginx-')) {
+                $channel = 'nginx';
             }
 
             // Extract date
@@ -1382,6 +1391,73 @@ final class LoggerController extends BaseController
                 continue;
             }
 
+            // Format 5: Nginx access log
+            // 192.168.1.1 - - [28/Jan/2026:16:30:45 +0100] "GET /api/users HTTP/1.1" 200 1234 "-" "Mozilla/5.0" rt=0.015 uct="0.000" uht="0.014" urt="0.014"
+            if (preg_match('/^(\S+)\s+-\s+(\S+)\s+\[([^\]]+)\]\s+"([^"]+)"\s+(\d{3})\s+(\d+)\s+"([^"]*)"\s+"([^"]*)"(.*)$/', $line, $matches)) {
+                $finalizeEntry();
+
+                $statusCode = (int) $matches[5];
+                $level = match (true) {
+                    $statusCode >= 500 => 'error',
+                    $statusCode >= 400 => 'warning',
+                    $statusCode >= 300 => 'notice',
+                    default => 'info',
+                };
+
+                // Parse nginx timestamp: 28/Jan/2026:16:30:45 +0100
+                $nginxTimestamp = $this->convertNginxTimestamp($matches[3]);
+
+                // Parse extra metrics (rt, uct, etc.)
+                $extraMetrics = trim($matches[9]);
+                $details = [];
+                if ($extraMetrics !== '') {
+                    $details[] = $extraMetrics;
+                }
+
+                $currentEntry = [
+                    'raw' => $line,
+                    'timestamp' => $nginxTimestamp,
+                    'channel' => 'nginx',
+                    'level' => $level,
+                    'message' => $matches[4] . ' → ' . $statusCode,
+                    'context' => 'ip=' . $matches[1] . ' size=' . $matches[6] . ' ua="' . substr($matches[8], 0, 50) . '"',
+                    'details' => $details,
+                    'level_class' => $getLevelClass($level),
+                ];
+                continue;
+            }
+
+            // Format 6: Nginx error log
+            // 2026/01/28 16:30:45 [error] 123#123: *456 message, client: 192.168.1.1, server: example.com, request: "GET /path HTTP/1.1"
+            if (preg_match('/^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+\[(\w+)\]\s+(\d+#\d+):\s+(.*)$/', $line, $matches)) {
+                $finalizeEntry();
+
+                $nginxLevel = strtolower($matches[2]);
+                $level = match ($nginxLevel) {
+                    'emerg', 'alert', 'crit' => 'critical',
+                    'error' => 'error',
+                    'warn' => 'warning',
+                    'notice' => 'notice',
+                    'info' => 'info',
+                    default => 'debug',
+                };
+
+                // Convert timestamp from 2026/01/28 16:30:45 to 2026-01-28 16:30:45
+                $timestamp = str_replace('/', '-', $matches[1]);
+
+                $currentEntry = [
+                    'raw' => $line,
+                    'timestamp' => $timestamp,
+                    'channel' => 'nginx',
+                    'level' => $level,
+                    'message' => $matches[4],
+                    'context' => 'pid=' . $matches[3],
+                    'details' => [],
+                    'level_class' => $getLevelClass($level),
+                ];
+                continue;
+            }
+
             // If it's a non-empty line that doesn't match any pattern
             $trimmedLine = trim($line);
 
@@ -1537,8 +1613,14 @@ final class LoggerController extends BaseController
             // PHP-FPM logs: explicit patterns only (no wildcards)
             '/^php-fpm\.log$/i',
             '/^php-fpm-error\.log$/i',
+            '/^php-fpm-access\.log$/i',
+            '/^php-fpm-slow\.log$/i',
             '/^php8\.[0-3]-fpm\.log$/i',
             '/^www-error\.log$/i',
+
+            // Nginx logs
+            '/^nginx-access\.log$/i',
+            '/^nginx-error\.log$/i',
 
             // System error/access logs
             '/^(error|access)\.log$/i',
@@ -1653,6 +1735,40 @@ final class LoggerController extends BaseController
         } catch (\Throwable $e) {
             // On any error, return original timestamp
             return $phpTimestamp;
+        }
+    }
+
+    /**
+     * Convert Nginx access log timestamp to standard format
+     *
+     * Nginx format: 28/Jan/2026:16:30:45 +0100
+     * We convert to: 2026-01-28 16:30:45
+     *
+     * @param string $nginxTimestamp Nginx timestamp
+     * @return string Converted timestamp in Y-m-d H:i:s format
+     */
+    private function convertNginxTimestamp(string $nginxTimestamp): string
+    {
+        try {
+            // Parse: 28/Jan/2026:16:30:45 +0100
+            $dt = \DateTime::createFromFormat('d/M/Y:H:i:s O', $nginxTimestamp);
+
+            if ($dt === false) {
+                // Try without timezone
+                $dt = \DateTime::createFromFormat('d/M/Y:H:i:s', $nginxTimestamp);
+            }
+
+            if ($dt === false) {
+                return $nginxTimestamp;
+            }
+
+            // Convert to local timezone
+            $localTz = new \DateTimeZone(date_default_timezone_get());
+            $dt->setTimezone($localTz);
+
+            return $dt->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            return $nginxTimestamp;
         }
     }
 }
