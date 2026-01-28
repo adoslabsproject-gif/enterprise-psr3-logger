@@ -165,6 +165,7 @@ class LoggerFacade
         self::getLogger('performance')->log($level, $message, $context);
     }
 
+
     /**
      * Log to 'js_errors' channel (JavaScript frontend errors)
      *
@@ -178,16 +179,21 @@ class LoggerFacade
     }
 
     /**
-     * Log to custom channel
+     * Get logger for a specific channel (fluent API)
+     *
+     * Usage:
+     * ```php
+     * Logger::channel('security')->warning('Failed login', ['ip' => '1.2.3.4']);
+     * Logger::channel('error')->error('Database connection failed', ['error' => $e->getMessage()]);
+     * Logger::channel('api')->info('Request received', ['method' => 'GET']);
+     * ```
      *
      * @param string $channel Channel name
-     * @param string $level Log level
-     * @param string $message Log message
-     * @param array<string, mixed> $context Context data
+     * @return Logger The logger instance for method chaining
      */
-    public static function channel(string $channel, string $level, string $message, array $context = []): void
+    public static function channel(string $channel): Logger
     {
-        self::getLogger($channel)->log($level, $message, $context);
+        return self::getLogger($channel);
     }
 
     // ========================================================================

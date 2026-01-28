@@ -90,12 +90,12 @@ final class LoggerController extends BaseController
             'color' => 'yellow',
             'file_prefix' => 'performance',
         ],
-        'audit' => [
-            'name' => 'Audit',
-            'description' => 'User actions, config changes, admin operations',
-            'icon' => 'user',
-            'color' => 'gray',
-            'file_prefix' => 'audit',
+        'error' => [
+            'name' => 'Error',
+            'description' => 'Application errors, exceptions, failures (+ database)',
+            'icon' => 'alert-triangle',
+            'color' => 'red',
+            'file_prefix' => 'error',
         ],
     ];
 
