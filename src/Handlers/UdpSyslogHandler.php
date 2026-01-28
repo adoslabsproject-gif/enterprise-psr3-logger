@@ -21,6 +21,8 @@ use Monolog\LogRecord;
  * - Zero I/O on PHP process: logs are sent to syslog daemon
  * - Scales infinitely: syslog daemon handles persistence
  * - RFC 5424 compliant format
+ * - Configurable IANA enterprise number for structured data
+ * - Failure tracking with optional fallback
  *
  * USAGE:
  * ```php
@@ -33,7 +35,7 @@ use Monolog\LogRecord;
  * - Docker: fluent-bit, logstash, vector
  * - Cloud: Papertrail, Loggly, Datadog
  *
- * @version 1.0.0
+ * @version 2.0.0
  */
 class UdpSyslogHandler extends AbstractProcessingHandler
 {
@@ -79,6 +81,30 @@ class UdpSyslogHandler extends AbstractProcessingHandler
     /** @var bool Include structured data (RFC 5424) */
     private bool $includeStructuredData = true;
 
+    /** @var int IANA Private Enterprise Number for structured data (RFC 5424) */
+    private int $enterpriseNumber = 99999;
+
+    /** @var bool Socket creation has been attempted */
+    private bool $socketAttempted = false;
+
+    /** @var int Counter for socket creation failures */
+    private int $socketFailures = 0;
+
+    /** @var int Last socket failure timestamp */
+    private int $lastSocketFailure = 0;
+
+    /** @var int Retry interval in seconds after socket failure */
+    private int $retryInterval = 60;
+
+    /** @var string|null Fallback file path when socket fails */
+    private ?string $fallbackPath = null;
+
+    /** @var int Total messages sent successfully */
+    private int $messagesSent = 0;
+
+    /** @var int Total messages dropped due to socket failure */
+    private int $messagesDropped = 0;
+
     /**
      * @param string $host Syslog server host (default: localhost)
      * @param int $port Syslog server port (default: 514)
@@ -86,6 +112,7 @@ class UdpSyslogHandler extends AbstractProcessingHandler
      * @param int $facility Syslog facility (default: LOCAL0)
      * @param Level $level Minimum log level to handle
      * @param bool $bubble Whether to bubble to next handler
+     * @param int $enterpriseNumber IANA Private Enterprise Number (default: 99999 = unassigned)
      */
     public function __construct(
         string $host = '127.0.0.1',
@@ -94,6 +121,7 @@ class UdpSyslogHandler extends AbstractProcessingHandler
         int $facility = self::FACILITY_LOCAL0,
         Level $level = Level::Debug,
         bool $bubble = true,
+        int $enterpriseNumber = 99999,
     ) {
         parent::__construct($level, $bubble);
 
@@ -102,6 +130,7 @@ class UdpSyslogHandler extends AbstractProcessingHandler
         $this->appName = $this->sanitizeAppName($appName);
         $this->facility = $facility;
         $this->hostname = gethostname() ?: 'localhost';
+        $this->enterpriseNumber = max(1, $enterpriseNumber);
     }
 
     /**
@@ -125,11 +154,82 @@ class UdpSyslogHandler extends AbstractProcessingHandler
     }
 
     /**
+     * Set IANA Private Enterprise Number for structured data
+     *
+     * @see https://www.iana.org/assignments/enterprise-numbers/
+     */
+    public function setEnterpriseNumber(int $number): self
+    {
+        $this->enterpriseNumber = max(1, $number);
+
+        return $this;
+    }
+
+    /**
+     * Set fallback file path for when socket fails
+     */
+    public function setFallbackPath(string $path): self
+    {
+        $this->fallbackPath = $path;
+
+        return $this;
+    }
+
+    /**
+     * Set retry interval for socket recreation after failure
+     */
+    public function setRetryInterval(int $seconds): self
+    {
+        $this->retryInterval = max(1, $seconds);
+
+        return $this;
+    }
+
+    /**
+     * Get handler statistics for monitoring
+     *
+     * @return array{
+     *     messages_sent: int,
+     *     messages_dropped: int,
+     *     socket_failures: int,
+     *     socket_available: bool,
+     *     host: string,
+     *     port: int
+     * }
+     */
+    public function getStats(): array
+    {
+        return [
+            'messages_sent' => $this->messagesSent,
+            'messages_dropped' => $this->messagesDropped,
+            'socket_failures' => $this->socketFailures,
+            'socket_available' => $this->socket !== null,
+            'host' => $this->host,
+            'port' => $this->port,
+        ];
+    }
+
+    /**
+     * Check if handler is healthy
+     */
+    public function isHealthy(): bool
+    {
+        return $this->socket !== null || !$this->socketAttempted;
+    }
+
+    /**
      * Write a log record
      */
     protected function write(LogRecord $record): void
     {
-        $this->sendUdp($this->formatSyslog($record));
+        $message = $this->formatSyslog($record);
+
+        if ($this->sendUdp($message)) {
+            $this->messagesSent++;
+        } else {
+            $this->messagesDropped++;
+            $this->writeToFallback($message);
+        }
     }
 
     /**
@@ -216,30 +316,72 @@ class UdpSyslogHandler extends AbstractProcessingHandler
             return '-';
         }
 
-        // [ctx@12345 key="value" key2="value2"]
-        // Using enterprise number 12345 (placeholder - replace with your IANA number)
-        return '[ctx@12345 ' . implode(' ', $pairs) . ']';
+        // [ctx@ENTERPRISE_NUMBER key="value" key2="value2"]
+        return "[ctx@{$this->enterpriseNumber} " . implode(' ', $pairs) . ']';
     }
 
     /**
      * Send message via UDP (fire-and-forget)
+     *
+     * @return bool True if message was sent, false on failure
      */
-    private function sendUdp(string $message): void
+    private function sendUdp(string $message): bool
     {
+        // Check if we should retry socket creation after failure
+        if ($this->socket === null && $this->socketAttempted) {
+            $now = time();
+            if (($now - $this->lastSocketFailure) < $this->retryInterval) {
+                return false; // Still in backoff period
+            }
+            // Reset for retry
+            $this->socketAttempted = false;
+        }
+
         // Lazy socket creation
         if ($this->socket === null) {
+            $this->socketAttempted = true;
             $socket = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+
             if ($socket === false) {
-                // Silently fail - logging should never crash the app
-                return;
+                $this->socketFailures++;
+                $this->lastSocketFailure = time();
+
+                // Log failure once per retry cycle
+                error_log(sprintf(
+                    '[%s] UdpSyslogHandler: Failed to create UDP socket for %s:%d (failure #%d)',
+                    date('Y-m-d H:i:s'),
+                    $this->host,
+                    $this->port,
+                    $this->socketFailures,
+                ));
+
+                return false;
             }
+
             // Set non-blocking mode
             socket_set_nonblock($socket);
             $this->socket = $socket;
         }
 
-        // Fire and forget - don't check result
-        @socket_sendto($this->socket, $message, strlen($message), 0, $this->host, $this->port);
+        // Fire and forget - check result for monitoring
+        $result = @socket_sendto($this->socket, $message, strlen($message), 0, $this->host, $this->port);
+
+        return $result !== false;
+    }
+
+    /**
+     * Write to fallback file when socket fails
+     */
+    private function writeToFallback(string $message): void
+    {
+        if ($this->fallbackPath === null) {
+            return;
+        }
+
+        $date = date('Y-m-d');
+        $filePath = $this->fallbackPath . "/syslog-fallback-{$date}.log";
+
+        @file_put_contents($filePath, $message . "\n", FILE_APPEND | LOCK_EX);
     }
 
     /**

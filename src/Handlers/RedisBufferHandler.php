@@ -28,6 +28,8 @@ use Monolog\LogRecord;
  * - Automatic batching (worker processes in batches)
  * - Persistent queue (survives restarts)
  * - Graceful degradation (falls back to file if Redis unavailable)
+ * - Backpressure handling with configurable thresholds
+ * - Monitoring statistics for observability
  *
  * USAGE:
  * ```php
@@ -37,7 +39,7 @@ use Monolog\LogRecord;
  * $logger->addHandler($handler);
  * ```
  *
- * @version 1.0.0
+ * @version 2.0.0
  */
 class RedisBufferHandler extends AbstractProcessingHandler
 {
@@ -47,20 +49,63 @@ class RedisBufferHandler extends AbstractProcessingHandler
     private const QUEUE_KEY_PREFIX = 'eap:logs:';
 
     /**
-     * Maximum queue size before dropping old entries
+     * Default maximum queue size before applying backpressure
      */
-    private const MAX_QUEUE_SIZE = 100000;
+    private const DEFAULT_MAX_QUEUE_SIZE = 100000;
+
+    /**
+     * Warning threshold as percentage of max queue size
+     */
+    private const WARNING_THRESHOLD_PERCENT = 80;
+
+    /**
+     * Trim check interval (every N writes)
+     */
+    private const TRIM_CHECK_INTERVAL = 50;
 
     private \Redis $redis;
     private string $queueKey;
     private string $appName;
     private bool $redisAvailable = true;
 
+    /** @var int Maximum queue size */
+    private int $maxQueueSize = self::DEFAULT_MAX_QUEUE_SIZE;
+
     /** @var string|null Fallback file path */
     private ?string $fallbackPath = null;
 
     /** @var bool Include extra metadata (pid, memory, request_id) */
     private bool $includeMetadata = true;
+
+    /** @var int Write counter for trim check */
+    private int $writeCounter = 0;
+
+    /** @var int Last known queue size (cached) */
+    private int $cachedQueueSize = 0;
+
+    /** @var int Last queue size check timestamp */
+    private int $lastSizeCheck = 0;
+
+    /** @var int Total messages pushed to Redis */
+    private int $messagesPushed = 0;
+
+    /** @var int Total messages written to fallback */
+    private int $messagesFallback = 0;
+
+    /** @var int Total messages dropped due to backpressure */
+    private int $messagesDropped = 0;
+
+    /** @var int Redis connection failures */
+    private int $connectionFailures = 0;
+
+    /** @var int Last failure timestamp for retry logic */
+    private int $lastFailureTime = 0;
+
+    /** @var int Retry interval in seconds */
+    private int $retryInterval = 5;
+
+    /** @var bool Backpressure warning logged */
+    private bool $backpressureWarningLogged = false;
 
     /**
      * @param \Redis $redis Redis instance (must be connected)
@@ -79,6 +124,16 @@ class RedisBufferHandler extends AbstractProcessingHandler
         $this->redis = $redis;
         $this->appName = $appName;
         $this->queueKey = self::QUEUE_KEY_PREFIX . $appName;
+    }
+
+    /**
+     * Set maximum queue size (backpressure threshold)
+     */
+    public function setMaxQueueSize(int $size): self
+    {
+        $this->maxQueueSize = max(1000, $size);
+
+        return $this;
     }
 
     /**
@@ -102,11 +157,67 @@ class RedisBufferHandler extends AbstractProcessingHandler
     }
 
     /**
+     * Set retry interval for Redis reconnection
+     */
+    public function setRetryInterval(int $seconds): self
+    {
+        $this->retryInterval = max(1, $seconds);
+
+        return $this;
+    }
+
+    /**
      * Get the Redis queue key (for worker configuration)
      */
     public function getQueueKey(): string
     {
         return $this->queueKey;
+    }
+
+    /**
+     * Get handler statistics for monitoring
+     *
+     * @return array{
+     *     messages_pushed: int,
+     *     messages_fallback: int,
+     *     messages_dropped: int,
+     *     connection_failures: int,
+     *     redis_available: bool,
+     *     queue_size: int,
+     *     queue_key: string,
+     *     backpressure_active: bool
+     * }
+     */
+    public function getStats(): array
+    {
+        return [
+            'messages_pushed' => $this->messagesPushed,
+            'messages_fallback' => $this->messagesFallback,
+            'messages_dropped' => $this->messagesDropped,
+            'connection_failures' => $this->connectionFailures,
+            'redis_available' => $this->redisAvailable,
+            'queue_size' => $this->getQueueLength(),
+            'queue_key' => $this->queueKey,
+            'backpressure_active' => $this->isBackpressureActive(),
+        ];
+    }
+
+    /**
+     * Check if handler is healthy
+     */
+    public function isHealthy(): bool
+    {
+        return $this->redisAvailable && !$this->isBackpressureActive();
+    }
+
+    /**
+     * Check if backpressure is active (queue near full)
+     */
+    public function isBackpressureActive(): bool
+    {
+        $size = $this->getCachedQueueSize();
+
+        return $size >= $this->maxQueueSize;
     }
 
     /**
@@ -121,18 +232,36 @@ class RedisBufferHandler extends AbstractProcessingHandler
             return; // JSON encoding failed, skip
         }
 
+        // Check if we should retry Redis after failure
+        if (!$this->redisAvailable) {
+            $now = time();
+            if (($now - $this->lastFailureTime) >= $this->retryInterval) {
+                $this->retryRedis();
+            }
+        }
+
         if ($this->redisAvailable) {
+            // Check backpressure before pushing
+            if ($this->shouldApplyBackpressure()) {
+                $this->messagesDropped++;
+                $this->logBackpressureWarning();
+
+                return;
+            }
+
             try {
                 $this->pushToRedis($json);
+                $this->messagesPushed++;
 
                 return;
             } catch (\Throwable $e) {
-                $this->redisAvailable = false;
+                $this->handleRedisFailure($e);
             }
         }
 
         // Fallback to file
         $this->writeToFallback($json);
+        $this->messagesFallback++;
     }
 
     /**
@@ -157,8 +286,8 @@ class RedisBufferHandler extends AbstractProcessingHandler
                 'app' => $this->appName,
             ];
 
-            // Include request ID if available
-            if (isset($record->context['request_id'])) {
+            // Include request ID if available (avoid duplication if already in context)
+            if (isset($record->context['request_id']) && !isset($entry['_meta']['request_id'])) {
                 $entry['_meta']['request_id'] = $record->context['request_id'];
             }
         }
@@ -167,21 +296,113 @@ class RedisBufferHandler extends AbstractProcessingHandler
     }
 
     /**
-     * Push entry to Redis queue
+     * Push entry to Redis queue with atomic trimming
      */
     private function pushToRedis(string $json): void
     {
         // LPUSH for FIFO processing (worker uses RPOP)
         $this->redis->lPush($this->queueKey, $json);
+        $this->writeCounter++;
 
-        // Trim queue if too large (keep last MAX_QUEUE_SIZE entries)
-        // Only check occasionally to reduce overhead
-        if (random_int(1, 100) === 1) {
+        // Periodic trim check (deterministic, not random)
+        if ($this->writeCounter >= self::TRIM_CHECK_INTERVAL) {
+            $this->writeCounter = 0;
+            $this->trimQueueIfNeeded();
+        }
+    }
+
+    /**
+     * Trim queue if exceeds maximum size (with atomic check)
+     */
+    private function trimQueueIfNeeded(): void
+    {
+        try {
             $size = $this->redis->lLen($this->queueKey);
-            if ($size > self::MAX_QUEUE_SIZE) {
-                $this->redis->lTrim($this->queueKey, 0, self::MAX_QUEUE_SIZE - 1);
+            $this->cachedQueueSize = (int) $size;
+            $this->lastSizeCheck = time();
+
+            // Trim with margin to avoid constant trimming
+            $trimThreshold = (int) ($this->maxQueueSize * 1.1);
+            if ($size > $trimThreshold) {
+                // Keep only maxQueueSize entries (FIFO: keep oldest, trim newest)
+                $this->redis->lTrim($this->queueKey, -$this->maxQueueSize, -1);
+
+                error_log(sprintf(
+                    '[%s] RedisBufferHandler: Queue trimmed from %d to %d entries',
+                    date('Y-m-d H:i:s'),
+                    $size,
+                    $this->maxQueueSize,
+                ));
+            }
+        } catch (\Throwable $e) {
+            // Non-critical, continue
+        }
+    }
+
+    /**
+     * Check if backpressure should be applied
+     */
+    private function shouldApplyBackpressure(): bool
+    {
+        $size = $this->getCachedQueueSize();
+
+        return $size >= $this->maxQueueSize;
+    }
+
+    /**
+     * Get cached queue size (refresh every 5 seconds max)
+     */
+    private function getCachedQueueSize(): int
+    {
+        $now = time();
+
+        // Refresh cache every 5 seconds
+        if (($now - $this->lastSizeCheck) >= 5) {
+            try {
+                $this->cachedQueueSize = (int) $this->redis->lLen($this->queueKey);
+                $this->lastSizeCheck = $now;
+            } catch (\Throwable $e) {
+                // Use cached value on failure
             }
         }
+
+        return $this->cachedQueueSize;
+    }
+
+    /**
+     * Log backpressure warning (once per session)
+     */
+    private function logBackpressureWarning(): void
+    {
+        if ($this->backpressureWarningLogged) {
+            return;
+        }
+
+        $this->backpressureWarningLogged = true;
+
+        error_log(sprintf(
+            '[%s] RedisBufferHandler: Backpressure active - queue size %d exceeds max %d. Messages being dropped.',
+            date('Y-m-d H:i:s'),
+            $this->cachedQueueSize,
+            $this->maxQueueSize,
+        ));
+    }
+
+    /**
+     * Handle Redis connection failure
+     */
+    private function handleRedisFailure(\Throwable $e): void
+    {
+        $this->redisAvailable = false;
+        $this->connectionFailures++;
+        $this->lastFailureTime = time();
+
+        error_log(sprintf(
+            '[%s] RedisBufferHandler: Redis connection failed (failure #%d): %s',
+            date('Y-m-d H:i:s'),
+            $this->connectionFailures,
+            $e->getMessage(),
+        ));
     }
 
     /**
@@ -231,10 +452,12 @@ class RedisBufferHandler extends AbstractProcessingHandler
         try {
             $this->redis->ping();
             $this->redisAvailable = true;
+            $this->backpressureWarningLogged = false; // Reset warning flag
 
             return true;
         } catch (\Throwable $e) {
             $this->redisAvailable = false;
+            $this->lastFailureTime = time();
 
             return false;
         }

@@ -28,6 +28,8 @@ services:
       LOG_BATCH_SIZE: ${LOG_BATCH_SIZE:-100}
       LOG_FLUSH_INTERVAL: ${LOG_FLUSH_INTERVAL:-5}
       LOG_WORKER_VERBOSE: ${LOG_WORKER_VERBOSE:-false}
+      LOG_IDLE_SLEEP_MS: ${LOG_IDLE_SLEEP_MS:-100}
+      LOG_MAX_RECONNECT_INTERVAL: ${LOG_MAX_RECONNECT_INTERVAL:-60}
     volumes:
       # Mount your log directory
       - ${LOG_VOLUME:-../../storage/logs}:/var/log/app
