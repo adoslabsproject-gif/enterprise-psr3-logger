@@ -184,9 +184,12 @@ $debugLevels = ['debug', 'info', 'notice'];
         </div>
         <?php endif; ?>
 
-        <!-- Usage Example -->
+        <!-- Usage Examples -->
         <div class="eap-logger-channel-card__usage">
-            <code>Logger::channel('<?= htmlspecialchars($key) ?>')->info('message');</code>
+            <code>Logger::channel('<?= htmlspecialchars($key) ?>')->info('message', $context);</code>
+        </div>
+        <div class="eap-logger-channel-card__usage eap-logger-channel-card__usage--alt">
+            <code>if (should_log('<?= htmlspecialchars($key) ?>', 'info')) { ... }</code>
         </div>
     </div>
     <?php endforeach; ?>
