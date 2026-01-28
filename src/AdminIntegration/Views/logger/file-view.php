@@ -15,7 +15,6 @@
  * @var string $admin_base_path Admin base path
  * @var string $csrf_token CSRF token
  */
-
 $formatBytes = function ($bytes) {
     $units = ['B', 'KB', 'MB', 'GB'];
     $i = 0;
@@ -23,10 +22,11 @@ $formatBytes = function ($bytes) {
         $bytes /= 1024;
         $i++;
     }
+
     return round($bytes, 2) . ' ' . $units[$i];
 };
 
-$getLevelClass = fn($level) => match ($level) {
+$getLevelClass = fn ($level) => match ($level) {
     'emergency', 'alert', 'critical', 'error' => 'danger',
     'warning' => 'warning',
     'notice', 'info' => 'info',
@@ -41,6 +41,7 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
         'page' => $newPage,
         'per_page' => $newPerPage ?? $per_page,
     ];
+
     return $admin_base_path . '/logger/view?' . http_build_query($params);
 };
 ?>
@@ -158,7 +159,7 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
                             // Check if it's a stack trace line
                             $isStack = str_starts_with(trim($detail), '#') || str_contains($detail, '->') || str_contains($detail, '::');
                             $class = $isStack ? 'eap-logger-entry__detail-line eap-logger-entry__detail-line--stack' : 'eap-logger-entry__detail-line';
-                        ?>
+                            ?>
                         <div class="<?= $class ?>"><?= htmlspecialchars($detail) ?></div>
                         <?php endforeach; ?>
                     </div>
@@ -203,20 +204,20 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
         <!-- Page Numbers -->
         <?php
         $start = max(1, $page - 2);
-        $end = min($pages, $page + 2);
+    $end = min($pages, $page + 2);
 
-        if ($start > 1): ?>
+    if ($start > 1): ?>
         <span class="eap-logger-pagination__ellipsis">...</span>
         <?php endif;
 
-        for ($i = $start; $i <= $end; $i++): ?>
+    for ($i = $start; $i <= $end; $i++): ?>
         <a href="<?= $buildUrl($i) ?>"
            class="eap-logger-pagination__link <?= $i === $page ? 'eap-logger-pagination__link--active' : '' ?>">
             <?= $i ?>
         </a>
         <?php endfor;
 
-        if ($end < $pages): ?>
+    if ($end < $pages): ?>
         <span class="eap-logger-pagination__ellipsis">...</span>
         <?php endif; ?>
 

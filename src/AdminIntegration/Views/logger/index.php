@@ -19,7 +19,6 @@
  * @var string $csrf_token CSRF token value
  * @var int $auto_reset_hours Hours before auto-reset to WARNING (default: 2)
  */
-
 $autoResetHours = $auto_reset_hours ?? 8;
 
 $icons = [
@@ -37,7 +36,7 @@ $icons = [
     'check' => '<polyline points="20 6 9 17 4 12"/>',
 ];
 
-$getIcon = fn($icon) => $icons[$icon] ?? $icons['box'];
+$getIcon = fn ($icon) => $icons[$icon] ?? $icons['box'];
 
 // Levels that trigger auto-reset (below WARNING)
 $debugLevels = ['debug', 'info', 'notice'];
@@ -79,7 +78,7 @@ $debugLevels = ['debug', 'info', 'notice'];
         $timeRemaining = $hasAutoReset ? max(0, strtotime($autoResetAt) - time()) : 0;
         $hoursRemaining = floor($timeRemaining / 3600);
         $minutesRemaining = floor(($timeRemaining % 3600) / 60);
-    ?>
+        ?>
     <div class="eap-logger-channel-card eap-logger-channel-card--<?= htmlspecialchars($channel['color'] ?? 'blue') ?> <?= !$channel['enabled'] ? 'eap-logger-channel-card--disabled' : '' ?> <?= $isDebugLevel ? 'eap-logger-channel-card--debug-mode' : '' ?>"
          data-channel="<?= htmlspecialchars($key) ?>"
          data-original-level="<?= htmlspecialchars($channel['level']) ?>"
@@ -154,7 +153,7 @@ $debugLevels = ['debug', 'info', 'notice'];
 
         <!-- Auto-Reset Toggle -->
         <?php
-        $autoResetEnabled = $channel['auto_reset_enabled'] ?? true; // Default ON
+            $autoResetEnabled = $channel['auto_reset_enabled'] ?? true; // Default ON
         ?>
         <div class="eap-logger-channel-card__auto-reset-toggle">
             <label class="eap-logger-auto-reset-switch">
@@ -221,8 +220,8 @@ $debugLevels = ['debug', 'info', 'notice'];
             <?php foreach ($log_files as $file): ?>
             <?php
             $isToday = $file['date'] === $today;
-            $channelColor = $file['color'] ?? 'gray';
-            ?>
+                $channelColor = $file['color'] ?? 'gray';
+                ?>
             <div class="eap-logger-file-card eap-logger-file-card--<?= $channelColor ?> <?= $isToday ? 'eap-logger-file-card--today' : '' ?>">
                 <a href="<?= htmlspecialchars($admin_base_path) ?>/logger/view?file=<?= urlencode($file['name']) ?>" class="eap-logger-file-card__link">
                     <div class="eap-logger-file-card__header">

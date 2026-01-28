@@ -102,7 +102,7 @@ final class LoggerController extends BaseController
 
         // Ensure logs directory exists
         if (!is_dir($this->logsPath)) {
-            @mkdir($this->logsPath, 0755, true);
+            @mkdir($this->logsPath, 0o755, true);
         }
     }
 
@@ -333,6 +333,7 @@ final class LoggerController extends BaseController
             $stmt = $this->pdo->prepare('SELECT min_level, enabled, auto_reset_enabled, auto_reset_at FROM log_channels WHERE channel = ?');
             $stmt->execute([$channel]);
             $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+
             return $row ?: ['min_level' => 'warning', 'enabled' => true, 'auto_reset_enabled' => true, 'auto_reset_at' => null];
         } catch (\Exception $e) {
             return ['min_level' => 'warning', 'enabled' => true, 'auto_reset_enabled' => true, 'auto_reset_at' => null];
@@ -407,7 +408,7 @@ final class LoggerController extends BaseController
             $timestamp,
             $channel,
             $oldLevel,
-            self::AUTO_RESET_HOURS
+            self::AUTO_RESET_HOURS,
         );
 
         $securityLogFile = $this->logsPath . '/security-' . date('Y-m-d') . '.log';
@@ -495,7 +496,7 @@ final class LoggerController extends BaseController
             $user['email'] ?? 'unknown',
             $user['id'] ?? 0,
             $this->getClientIp(),
-            $this->getUserAgent() ?? 'unknown'
+            $this->getUserAgent() ?? 'unknown',
         );
 
         // Write to security log file
@@ -521,6 +522,7 @@ final class LoggerController extends BaseController
         if (file_exists($filepath)) {
             file_put_contents($filepath, '');
             $this->audit('logger.file_cleared', ['file' => $filename]);
+
             return $this->json([
                 'success' => true,
                 'message' => 'Log file cleared',
@@ -586,6 +588,7 @@ final class LoggerController extends BaseController
             if ($this->isAjax()) {
                 return $this->json(['success' => false, 'message' => 'Bot token and Chat ID are required']);
             }
+
             return $this->error('Bot token and Chat ID are required when Telegram is enabled');
         }
 
@@ -628,6 +631,7 @@ final class LoggerController extends BaseController
             if ($this->isAjax()) {
                 return $this->json(['success' => false, 'message' => $e->getMessage()]);
             }
+
             return $this->error('Failed to update Telegram config: ' . $e->getMessage());
         }
     }
@@ -651,7 +655,7 @@ final class LoggerController extends BaseController
             $level,
             $user['email'] ?? 'unknown',
             $user['id'] ?? 0,
-            $this->getClientIp()
+            $this->getClientIp(),
         );
 
         $securityLogFile = $this->logsPath . '/security-' . date('Y-m-d') . '.log';
@@ -699,6 +703,7 @@ final class LoggerController extends BaseController
 
         // Get all channel configs from database
         $dbChannels = [];
+
         try {
             $stmt = $this->pdo->query('SELECT channel, min_level, enabled, auto_reset_enabled, auto_reset_at FROM log_channels');
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -773,7 +778,7 @@ final class LoggerController extends BaseController
         }
 
         // Sort by modified date descending
-        usort($files, fn($a, $b) => $b['modified'] <=> $a['modified']);
+        usort($files, fn ($a, $b) => $b['modified'] <=> $a['modified']);
 
         return $files;
     }
@@ -954,6 +959,7 @@ final class LoggerController extends BaseController
             $bytes /= 1024;
             $i++;
         }
+
         return round($bytes, 2) . ' ' . $units[$i];
     }
 
