@@ -566,6 +566,176 @@
     }
 
     // ==========================================================================
+    // Bulk Actions for Log Files
+    // ==========================================================================
+
+    function initBulkActions() {
+        var selectAllCheckbox = document.getElementById('select-all-files');
+        var fileCheckboxes = document.querySelectorAll('.file-checkbox');
+        var selectedCountEl = document.getElementById('selected-count');
+        var bulkDownloadBtn = document.getElementById('bulk-download-btn');
+        var bulkClearBtn = document.getElementById('bulk-clear-btn');
+        var bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+
+        if (!selectAllCheckbox) return;
+
+        function updateBulkActionsState() {
+            var checked = document.querySelectorAll('.file-checkbox:checked');
+            var count = checked.length;
+
+            if (selectedCountEl) selectedCountEl.textContent = count;
+
+            if (bulkDownloadBtn) bulkDownloadBtn.disabled = count === 0;
+            if (bulkClearBtn) bulkClearBtn.disabled = count === 0;
+            if (bulkDeleteBtn) bulkDeleteBtn.disabled = count === 0;
+        }
+
+        function getSelectedFiles() {
+            var files = [];
+            document.querySelectorAll('.file-checkbox:checked').forEach(function(cb) {
+                files.push(cb.dataset.file);
+            });
+            return files;
+        }
+
+        // Select all checkbox
+        selectAllCheckbox.addEventListener('change', function() {
+            fileCheckboxes.forEach(function(cb) {
+                cb.checked = selectAllCheckbox.checked;
+            });
+            updateBulkActionsState();
+        });
+
+        // Individual file checkboxes
+        fileCheckboxes.forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                var allChecked = document.querySelectorAll('.file-checkbox:checked').length === fileCheckboxes.length;
+                selectAllCheckbox.checked = allChecked;
+                updateBulkActionsState();
+            });
+        });
+
+        // Bulk download
+        if (bulkDownloadBtn) {
+            bulkDownloadBtn.addEventListener('click', function() {
+                var files = getSelectedFiles();
+                if (files.length === 0) return;
+
+                // Download each file (browser will handle multiple downloads)
+                files.forEach(function(file, index) {
+                    setTimeout(function() {
+                        var a = document.createElement('a');
+                        a.href = adminBasePath + '/logger/file/download?file=' + encodeURIComponent(file);
+                        a.download = file;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }, index * 200); // Stagger downloads
+                });
+
+                showToast('Downloading ' + files.length + ' file(s)', 'success');
+            });
+        }
+
+        // Bulk clear
+        if (bulkClearBtn) {
+            bulkClearBtn.addEventListener('click', function() {
+                var files = getSelectedFiles();
+                if (files.length === 0) return;
+
+                if (!confirm('Clear contents of ' + files.length + ' selected file(s)? This cannot be undone.')) return;
+
+                var cleared = 0;
+                var errors = 0;
+
+                files.forEach(function(file) {
+                    fetch(adminBasePath + '/logger/file/clear', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: '_csrf_token=' + encodeURIComponent(csrfToken) +
+                              '&file=' + encodeURIComponent(file)
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.success) {
+                            cleared++;
+                            // Update file size in card
+                            var card = document.querySelector('[data-filename="' + file + '"]');
+                            if (card) {
+                                var sizeEl = card.querySelector('.eap-logger-file-card__size');
+                                if (sizeEl) sizeEl.textContent = '0 B';
+                            }
+                        } else {
+                            errors++;
+                        }
+                    })
+                    .catch(function() { errors++; })
+                    .finally(function() {
+                        if (cleared + errors === files.length) {
+                            var msg = cleared + ' file(s) cleared';
+                            if (errors > 0) msg += ', ' + errors + ' error(s)';
+                            showToast(msg, errors > 0 ? 'error' : 'success');
+                        }
+                    });
+                });
+            });
+        }
+
+        // Bulk delete
+        if (bulkDeleteBtn) {
+            bulkDeleteBtn.addEventListener('click', function() {
+                var files = getSelectedFiles();
+                if (files.length === 0) return;
+
+                if (!confirm('DELETE ' + files.length + ' selected file(s)? This cannot be undone.')) return;
+
+                var deleted = 0;
+                var errors = 0;
+
+                files.forEach(function(file) {
+                    fetch(adminBasePath + '/logger/file/delete', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-Token': csrfToken
+                        },
+                        body: '_csrf_token=' + encodeURIComponent(csrfToken) +
+                              '&file=' + encodeURIComponent(file)
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.success) {
+                            deleted++;
+                            // Remove card from UI
+                            var card = document.querySelector('[data-filename="' + file + '"]');
+                            if (card) card.remove();
+                        } else {
+                            errors++;
+                        }
+                    })
+                    .catch(function() { errors++; })
+                    .finally(function() {
+                        if (deleted + errors === files.length) {
+                            var msg = deleted + ' file(s) deleted';
+                            if (errors > 0) msg += ', ' + errors + ' error(s)';
+                            showToast(msg, errors > 0 ? 'error' : 'success');
+
+                            // Reset selection
+                            selectAllCheckbox.checked = false;
+                            updateBulkActionsState();
+                        }
+                    });
+                });
+            });
+        }
+    }
+
+    // ==========================================================================
     // Initialize
     // ==========================================================================
 
@@ -579,6 +749,7 @@
         initModalCloseHandlers();
         initTelegramConfig();
         initPhpErrorsClearForm();
+        initBulkActions();
     }
 
     // Run on DOMContentLoaded or immediately if already loaded

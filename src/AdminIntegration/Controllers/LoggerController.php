@@ -9,6 +9,7 @@ use AdosLabs\AdminPanel\Database\Pool\DatabasePool;
 use AdosLabs\AdminPanel\Http\Response;
 use AdosLabs\AdminPanel\Services\AuditService;
 use AdosLabs\AdminPanel\Services\SessionService;
+use AdosLabs\EnterprisePSR3Logger\LoggerFacade as Logger;
 use PDO;
 
 /**
@@ -46,6 +47,11 @@ final class LoggerController extends BaseController
     /**
      * Channel definitions - must match database log_channels table
      * These channels are configurable via the admin panel
+     *
+     * 'allowed_levels' restricts which levels can be selected:
+     * - 'error' channel: only error+ (no debug/info/notice/warning)
+     * - 'default' channel: only warning+ (no debug/info/notice)
+     * - other channels: all levels available
      */
     private const CHANNELS = [
         'default' => [
@@ -54,6 +60,7 @@ final class LoggerController extends BaseController
             'icon' => 'box',
             'color' => 'blue',
             'file_prefix' => 'default',
+            'allowed_levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
         ],
         'security' => [
             'name' => 'Security',
@@ -61,6 +68,7 @@ final class LoggerController extends BaseController
             'icon' => 'shield',
             'color' => 'purple',
             'file_prefix' => 'security',
+            'allowed_levels' => null,
         ],
         'api' => [
             'name' => 'API',
@@ -68,6 +76,7 @@ final class LoggerController extends BaseController
             'icon' => 'globe',
             'color' => 'cyan',
             'file_prefix' => 'api',
+            'allowed_levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
         ],
         'database' => [
             'name' => 'Database',
@@ -75,6 +84,7 @@ final class LoggerController extends BaseController
             'icon' => 'database',
             'color' => 'green',
             'file_prefix' => 'database',
+            'allowed_levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
         ],
         'email' => [
             'name' => 'Email',
@@ -82,6 +92,7 @@ final class LoggerController extends BaseController
             'icon' => 'mail',
             'color' => 'orange',
             'file_prefix' => 'email',
+            'allowed_levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
         ],
         'performance' => [
             'name' => 'Performance',
@@ -89,6 +100,7 @@ final class LoggerController extends BaseController
             'icon' => 'zap',
             'color' => 'yellow',
             'file_prefix' => 'performance',
+            'allowed_levels' => ['warning', 'error', 'critical', 'alert', 'emergency'],
         ],
         'error' => [
             'name' => 'Error',
@@ -96,6 +108,7 @@ final class LoggerController extends BaseController
             'icon' => 'alert-triangle',
             'color' => 'red',
             'file_prefix' => 'error',
+            'allowed_levels' => ['error', 'critical', 'alert', 'emergency'],
         ],
     ];
 
@@ -109,6 +122,13 @@ final class LoggerController extends BaseController
             'icon' => 'alert-triangle',
             'color' => 'red',
             'file_prefix' => 'php_errors',
+        ],
+        'php-fpm' => [
+            'name' => 'PHP-FPM',
+            'description' => 'PHP-FPM access logs, slow requests, pool status',
+            'icon' => 'layers',
+            'color' => 'gray',
+            'file_prefix' => 'php-fpm',
         ],
     ];
 
@@ -154,6 +174,9 @@ final class LoggerController extends BaseController
      */
     public function index(): Response
     {
+        // Ensure timezone is set from environment or default
+        $this->ensureTimezone();
+
         // Process any expired auto-resets
         $this->processAutoResets();
 
@@ -173,6 +196,8 @@ final class LoggerController extends BaseController
             'logs_path' => $this->logsPath,
             'levels' => array_keys(self::LEVELS),
             'auto_reset_hours' => self::AUTO_RESET_HOURS,
+            'timezone' => date_default_timezone_get(),
+            'server_time' => date('Y-m-d H:i:s'),
             'page_title' => 'Logging Dashboard',
             'extra_styles' => ['/module-assets/enterprise-psr3-logger/css/logger.css'],
             'extra_scripts' => ['/module-assets/enterprise-psr3-logger/js/logger.js'],
@@ -185,18 +210,22 @@ final class LoggerController extends BaseController
      */
     public function viewFile(): Response
     {
+        // Ensure timezone is set from environment or default
+        $this->ensureTimezone();
+
         $filename = $this->input('file', '');
         $page = max(1, (int) $this->input('page', 1));
         $perPage = (int) $this->input('per_page', 100);
 
         // Security: validate filename
-        if (!preg_match('/^[a-z_]+-\d{4}-\d{2}-\d{2}\.log$/', $filename) && $filename !== 'php_errors.log') {
-            return $this->error('Invalid filename');
+        if (!$this->isValidLogFilename($filename)) {
+            return $this->json(['error' => 'Invalid filename', 'code' => 'ERROR']);
         }
 
-        $filepath = $this->logsPath . '/' . $filename;
+        // Try to find the file - first in logsPath, then check system paths
+        $filepath = $this->resolveLogFilePath($filename);
 
-        if (!file_exists($filepath)) {
+        if ($filepath === null || !file_exists($filepath)) {
             return $this->view('logger/file-view', [
                 'filename' => $filename,
                 'exists' => false,
@@ -215,8 +244,8 @@ final class LoggerController extends BaseController
         $totalLines = count($lines);
         $pages = (int) ceil($totalLines / $perPage);
 
-        // Reverse to show newest first
-        $lines = array_reverse($lines);
+        // Keep chronological order (oldest first, newest last)
+        // Page 1 = first entries, last page = most recent entries
 
         // Paginate
         $offset = ($page - 1) * $perPage;
@@ -273,6 +302,15 @@ final class LoggerController extends BaseController
             return $this->json(['success' => false, 'message' => 'Invalid log level']);
         }
 
+        // Validate level is allowed for this channel
+        $allowedLevels = self::CHANNELS[$channel]['allowed_levels'] ?? null;
+        if ($allowedLevels !== null && !in_array($level, $allowedLevels, true)) {
+            return $this->json([
+                'success' => false,
+                'message' => "Level '{$level}' is not allowed for channel '{$channel}'. Allowed: " . implode(', ', $allowedLevels),
+            ]);
+        }
+
         try {
             // Get old values for audit diff
             $oldConfig = $this->getChannelConfig($channel);
@@ -319,12 +357,41 @@ final class LoggerController extends BaseController
 
             // --- SECURITY LOGGING ---
 
-            // 3. Log to security channel file (skip for toggle-only)
+            // 3. Log to security channel via Logger (always log changes)
+            $user = $this->getUser();
+            if (!$toggleOnly && !$isAutoResetToggleChange) {
+                Logger::channel('security')->warning('Log channel configuration changed', [
+                    'channel' => $channel,
+                    'old_level' => $oldConfig['min_level'] ?? 'warning',
+                    'new_level' => $level,
+                    'old_enabled' => $oldConfig['enabled'] ?? true,
+                    'new_enabled' => $enabled,
+                    'user_id' => $user['id'] ?? 0,
+                    'user_email' => $user['email'] ?? 'unknown',
+                    'ip' => $this->getClientIp(),
+                ]);
+            } elseif ($toggleOnly) {
+                Logger::channel('security')->warning('Log channel toggled', [
+                    'channel' => $channel,
+                    'enabled' => $enabled,
+                    'user_id' => $user['id'] ?? 0,
+                    'ip' => $this->getClientIp(),
+                ]);
+            } elseif ($isAutoResetToggleChange) {
+                Logger::channel('security')->warning('Log channel auto-reset toggled', [
+                    'channel' => $channel,
+                    'auto_reset_enabled' => $autoResetEnabled,
+                    'user_id' => $user['id'] ?? 0,
+                    'ip' => $this->getClientIp(),
+                ]);
+            }
+
+            // 5. Log to security channel file (skip for toggle-only)
             if (!$toggleOnly && !$isAutoResetToggleChange) {
                 $this->logToSecurityChannel($channel, $enabled, $level, $oldConfig);
             }
 
-            // 4. Log to database audit
+            // 6. Log to database audit
             $auditAction = match (true) {
                 $toggleOnly => 'logger.channel_toggled',
                 $isAutoResetToggleChange => 'logger.channel_auto_reset_toggled',
@@ -406,7 +473,16 @@ final class LoggerController extends BaseController
                     WHERE channel = ?
                 ")->execute([$channel]);
 
-                // Log the auto-reset
+                // Log to security channel via Logger
+                Logger::channel('security')->warning('Log channel auto-reset to WARNING', [
+                    'channel' => $channel,
+                    'old_level' => $oldLevel,
+                    'new_level' => 'warning',
+                    'reason' => 'Exceeded ' . self::AUTO_RESET_HOURS . ' hour limit',
+                    'action' => 'automatic',
+                ]);
+
+                // Log the auto-reset to file
                 $this->logAutoReset($channel, $oldLevel);
                 $this->audit('logger.channel_auto_reset', [
                     'channel' => $channel,
@@ -544,7 +620,7 @@ final class LoggerController extends BaseController
         $filename = $this->input('file', '');
 
         // Security: validate filename
-        if (!preg_match('/^[a-z_]+-\d{4}-\d{2}-\d{2}\.log$/', $filename) && $filename !== 'php_errors.log') {
+        if (!$this->isValidLogFilename($filename)) {
             return $this->json(['success' => false, 'message' => 'Invalid filename']);
         }
 
@@ -572,17 +648,55 @@ final class LoggerController extends BaseController
         $filename = $this->input('file', '');
 
         // Security: validate filename
-        if (!preg_match('/^[a-z_]+-\d{4}-\d{2}-\d{2}\.log$/', $filename) && $filename !== 'php_errors.log') {
+        if (!$this->isValidLogFilename($filename)) {
             return $this->error('Invalid filename');
         }
 
-        $filepath = $this->logsPath . '/' . $filename;
+        $filepath = $this->resolveLogFilePath($filename);
 
-        if (!file_exists($filepath)) {
+        if ($filepath === null || !file_exists($filepath)) {
             return $this->error('File not found');
         }
 
         return Response::download($filepath, $filename);
+    }
+
+    /**
+     * Delete a log file
+     * POST /admin/logger/file/delete
+     */
+    public function deleteFile(): Response
+    {
+        $filename = $this->input('file', '');
+
+        // Security: validate filename
+        if (!$this->isValidLogFilename($filename)) {
+            return $this->json(['success' => false, 'message' => 'Invalid filename']);
+        }
+
+        // Only allow deleting files in logsPath (not system files)
+        $filepath = $this->logsPath . '/' . $filename;
+
+        if (!file_exists($filepath)) {
+            return $this->json(['success' => false, 'message' => 'File not found']);
+        }
+
+        if (@unlink($filepath)) {
+            $this->audit('logger.file_deleted', ['file' => $filename]);
+
+            Logger::channel('security')->warning('Log file deleted', [
+                'file' => $filename,
+                'user_id' => $this->getUser()['id'] ?? 0,
+                'ip' => $this->getClientIp(),
+            ]);
+
+            return $this->json([
+                'success' => true,
+                'message' => 'File deleted',
+            ]);
+        }
+
+        return $this->json(['success' => false, 'message' => 'Failed to delete file']);
     }
 
     /**
@@ -757,6 +871,7 @@ final class LoggerController extends BaseController
                 'level' => $dbConfig['min_level'] ?? 'warning',  // Default to WARNING (safe)
                 'auto_reset_enabled' => $dbConfig !== null ? $dbConfig['auto_reset_enabled'] : true,  // Default ON
                 'auto_reset_at' => $dbConfig['auto_reset_at'] ?? null,
+                'allowed_levels' => $meta['allowed_levels'] ?? null,
             ]);
         }
 
@@ -792,6 +907,8 @@ final class LoggerController extends BaseController
                 $channel = $matches[1];
             } elseif ($file === 'php_errors.log') {
                 $channel = 'php_errors';
+            } elseif (str_starts_with($file, 'php-fpm')) {
+                $channel = 'php-fpm';
             }
 
             // Extract date
@@ -812,6 +929,9 @@ final class LoggerController extends BaseController
             ];
         }
 
+        // Add system log files (php_errors.log from ini_get, php-fpm logs)
+        $this->addSystemLogFiles($files);
+
         // Sort by modified date descending
         usort($files, fn ($a, $b) => $b['modified'] <=> $a['modified']);
 
@@ -819,14 +939,85 @@ final class LoggerController extends BaseController
     }
 
     /**
+     * Add system log files (PHP error log, php-fpm logs) to the file list
+     */
+    private function addSystemLogFiles(array &$files): void
+    {
+        // PHP error log from ini_get
+        $phpErrorLog = ini_get('error_log');
+        if ($phpErrorLog && file_exists($phpErrorLog) && is_readable($phpErrorLog)) {
+            // Check if not already in list
+            $alreadyListed = false;
+            foreach ($files as $f) {
+                if (realpath($this->logsPath . '/' . $f['name']) === realpath($phpErrorLog)) {
+                    $alreadyListed = true;
+                    break;
+                }
+            }
+
+            if (!$alreadyListed) {
+                $size = filesize($phpErrorLog);
+                $modified = filemtime($phpErrorLog);
+                $files[] = [
+                    'name' => basename($phpErrorLog),
+                    'channel' => 'php_errors',
+                    'date' => null,
+                    'size' => $size,
+                    'size_human' => $this->formatBytes($size),
+                    'modified' => $modified,
+                    'modified_human' => date('Y-m-d H:i:s', $modified),
+                    'color' => self::SPECIAL_CHANNELS['php_errors']['color'],
+                    'full_path' => $phpErrorLog,
+                ];
+            }
+        }
+
+        // Common php-fpm log locations
+        $phpFpmPaths = [
+            '/var/log/php-fpm/error.log',
+            '/var/log/php-fpm/www-error.log',
+            '/var/log/php-fpm/access.log',
+            '/var/log/php-fpm/www-access.log',
+            '/var/log/php-fpm.log',
+            '/var/log/php7.4-fpm.log',
+            '/var/log/php8.0-fpm.log',
+            '/var/log/php8.1-fpm.log',
+            '/var/log/php8.2-fpm.log',
+            '/var/log/php8.3-fpm.log',
+            '/usr/local/var/log/php-fpm.log',
+        ];
+
+        foreach ($phpFpmPaths as $path) {
+            if (file_exists($path) && is_readable($path)) {
+                $size = filesize($path);
+                $modified = filemtime($path);
+                $files[] = [
+                    'name' => basename($path),
+                    'channel' => 'php-fpm',
+                    'date' => null,
+                    'size' => $size,
+                    'size_human' => $this->formatBytes($size),
+                    'modified' => $modified,
+                    'modified_human' => date('Y-m-d H:i:s', $modified),
+                    'color' => self::SPECIAL_CHANNELS['php-fpm']['color'],
+                    'full_path' => $path,
+                ];
+            }
+        }
+    }
+
+    /**
      * Parse log file content into structured entries
      *
-     * Supports two formats:
-     * 1. Single-line JSON: [2026-01-27 15:30:45.123] channel.LEVEL: message {"context":"data"}
-     * 2. Multi-line human-readable:
-     *    [2026-01-27 15:30:45.123] channel.LEVEL: message
-     *        | Key: Value
-     *        | Key2: Value2
+     * Supports multiple formats:
+     * 1. Simple format: [2026-01-27 15:30:45.123] channel.LEVEL: message {"context":"data"}
+     * 2. Enhanced format: [2026-01-27 15:30:45.123] [LEVEL] channel | message | context
+     * 3. DetailedLineFormatter multi-line format:
+     *    [2026-01-27 15:30:45.123456] [WRN] [channel] [pid:123] [mem:2MB]
+     *      ▶ Message here
+     *      │ key=value key2=value2
+     *      └ Exception info
+     * 4. PHP error format: [27-Jan-2026 15:30:45 Europe/Rome] PHP Warning: message
      */
     private function parseLogLines(array $lines): array
     {
@@ -834,12 +1025,37 @@ final class LoggerController extends BaseController
         $currentEntry = null;
         $detailLines = [];
 
+        // Level abbreviation mapping for DetailedLineFormatter
+        $levelAbbrevMap = [
+            'DBG' => 'debug',
+            'INF' => 'info',
+            'NTC' => 'notice',
+            'WRN' => 'warning',
+            'ERR' => 'error',
+            'CRT' => 'critical',
+            'ALT' => 'alert',
+            'EMG' => 'emergency',
+        ];
+
+        $getLevelClass = fn ($level) => match ($level) {
+            'emergency', 'alert', 'critical', 'error' => 'danger',
+            'warning' => 'warning',
+            'notice', 'info' => 'info',
+            'debug' => 'secondary',
+            default => 'secondary',
+        };
+
         $finalizeEntry = function () use (&$parsed, &$currentEntry, &$detailLines) {
             if ($currentEntry !== null) {
-                // If we have detail lines, add them as context
+                // Merge detail lines into a single context string for inline display
                 if (!empty($detailLines)) {
                     $currentEntry['details'] = $detailLines;
-                    $currentEntry['context'] = implode("\n", $detailLines);
+                    // If there's already context, append detail lines
+                    if ($currentEntry['context']) {
+                        $currentEntry['context'] .= "\n" . implode("\n", $detailLines);
+                    } else {
+                        $currentEntry['context'] = implode("\n", $detailLines);
+                    }
                 }
                 $parsed[] = $currentEntry;
                 $detailLines = [];
@@ -847,7 +1063,31 @@ final class LoggerController extends BaseController
         };
 
         foreach ($lines as $line) {
-            // Check if this is a detail line (starts with whitespace and |)
+            // Skip empty lines
+            if (trim($line) === '') {
+                continue;
+            }
+
+            // Check for DetailedLineFormatter continuation lines (▶, │, └)
+            if (preg_match('/^\s+([▶│└])\s*(.*)$/', $line, $contMatch)) {
+                if ($currentEntry !== null) {
+                    $symbol = $contMatch[1];
+                    $content = trim($contMatch[2]);
+
+                    if ($symbol === '▶') {
+                        // This is the message line
+                        $currentEntry['message'] = $content;
+                    } else {
+                        // │ or └ are context/extra lines - add to details
+                        if ($content !== '') {
+                            $detailLines[] = $content;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // Check for old-style detail line (starts with whitespace and |)
             if (preg_match('/^\s+\|\s*(.*)$/', $line, $detailMatch)) {
                 if ($currentEntry !== null) {
                     $detailLines[] = trim($detailMatch[1]);
@@ -855,10 +1095,93 @@ final class LoggerController extends BaseController
                 continue;
             }
 
-            // Check if this is a new log entry header
-            // Format: [2026-01-27 15:30:45.123] channel.LEVEL: message
+            // --- NEW ENTRY PATTERNS ---
+
+            // Format 1: DetailedLineFormatter header (with full level name or abbreviation)
+            // [2026-01-28 10:07:15.970494] [Warning] [security] [pid:62850] [mem:2MB]
+            // or [2026-01-28 10:07:15.970494] [WRN] [security] [pid:62850] [mem:2MB]
+            if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s+\[(\w+)\]\s+\[(\w+)\](.*)$/', $line, $matches)) {
+                $finalizeEntry();
+
+                $levelText = $matches[2];
+                $levelUpper = strtoupper($levelText);
+                // Try abbreviation map first, then try full level name
+                if (isset($levelAbbrevMap[$levelUpper])) {
+                    $level = $levelAbbrevMap[$levelUpper];
+                } else {
+                    // Full level name like "Warning", "Error", etc.
+                    $level = strtolower($levelText);
+                }
+                $channel = $matches[3];
+                $metadata = trim($matches[4]);
+
+                // Parse metadata (pid, mem, etc.) and look for message after brackets
+                $extraInfo = [];
+                $inlineMessage = '';
+                $inlineContext = null;
+
+                // Check if there's content after the metadata brackets
+                // Pattern: [pid:123] [mem:2MB] may be followed by message
+                $remainingAfterBrackets = $metadata;
+                while (preg_match('/^\s*\[([^\]]+)\](.*)$/', $remainingAfterBrackets, $metaMatch)) {
+                    $extraInfo[] = $metaMatch[1];
+                    $remainingAfterBrackets = $metaMatch[2];
+                }
+
+                // If there's text after all brackets, it could be the message
+                $remainingAfterBrackets = trim($remainingAfterBrackets);
+                if ($remainingAfterBrackets !== '') {
+                    // Check if it has context (separated by |)
+                    if (str_contains($remainingAfterBrackets, ' | ')) {
+                        $parts = explode(' | ', $remainingAfterBrackets, 2);
+                        $inlineMessage = trim($parts[0]);
+                        $inlineContext = trim($parts[1]);
+                    } else {
+                        $inlineMessage = $remainingAfterBrackets;
+                    }
+                }
+
+                $currentEntry = [
+                    'raw' => $line,
+                    'timestamp' => $matches[1],
+                    'channel' => $channel,
+                    'level' => $level,
+                    'message' => $inlineMessage, // May be empty, populated from ▶ line or inline
+                    'context' => $inlineContext,
+                    'details' => !empty($extraInfo) ? $extraInfo : [],
+                    'level_class' => $getLevelClass($level),
+                ];
+                continue;
+            }
+
+            // Format 2: Enhanced format - [2026-01-27 15:30:45.123] [LEVEL] channel | message | context
+            if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s+\[(\w+)\]\s+(\w+)\s*\|\s*(.*)$/', $line, $matches)) {
+                $finalizeEntry();
+
+                $level = strtolower(trim($matches[2]));
+                $channel = $matches[3];
+                $rest = $matches[4];
+
+                // Split message and context by |
+                $parts = explode(' | ', $rest, 2);
+                $message = trim($parts[0]);
+                $context = isset($parts[1]) ? trim($parts[1]) : null;
+
+                $currentEntry = [
+                    'raw' => $line,
+                    'timestamp' => $matches[1],
+                    'channel' => $channel,
+                    'level' => $level,
+                    'message' => $message,
+                    'context' => $context,
+                    'details' => [],
+                    'level_class' => $getLevelClass($level),
+                ];
+                continue;
+            }
+
+            // Format 3: Simple format - [2026-01-27 15:30:45.123] channel.LEVEL: message {"context"}
             if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s+(\w+)\.(\w+):\s*(.*)$/', $line, $matches)) {
-                // Finalize previous entry
                 $finalizeEntry();
 
                 $message = $matches[4];
@@ -880,18 +1203,12 @@ final class LoggerController extends BaseController
                     'message' => $message,
                     'context' => $context,
                     'details' => [],
-                    'level_class' => match ($level) {
-                        'emergency', 'alert', 'critical', 'error' => 'danger',
-                        'warning' => 'warning',
-                        'notice', 'info' => 'info',
-                        'debug' => 'secondary',
-                        default => 'secondary',
-                    },
+                    'level_class' => $getLevelClass($level),
                 ];
                 continue;
             }
 
-            // Check for PHP error format: [27-Jan-2026 15:30:45 Europe/Rome] PHP Warning: message
+            // Format 4: PHP error format - [27-Jan-2026 15:30:45 Europe/Rome] PHP Warning: message
             if (preg_match('/^\[(\d{2}-\w{3}-\d{4} \d{2}:\d{2}:\d{2}(?:\s+\S+)?)\]\s+(PHP \w+):\s*(.*)$/', $line, $matches)) {
                 $finalizeEntry();
 
@@ -913,19 +1230,33 @@ final class LoggerController extends BaseController
                     'message' => $matches[2] . ': ' . $matches[3],
                     'context' => null,
                     'details' => [],
-                    'level_class' => match ($level) {
-                        'critical', 'error' => 'danger',
-                        'warning' => 'warning',
-                        'notice' => 'info',
-                        default => 'secondary',
-                    },
+                    'level_class' => $getLevelClass($level),
                 ];
                 continue;
             }
 
             // If it's a non-empty line that doesn't match any pattern, treat as continuation
-            if (trim($line) !== '' && $currentEntry !== null) {
-                $detailLines[] = trim($line);
+            if ($currentEntry !== null) {
+                $trimmedLine = trim($line);
+
+                // If current entry has no message yet, this line might be the message
+                if (empty($currentEntry['message'])) {
+                    // Check if line has context (separated by |)
+                    if (str_contains($trimmedLine, ' | ')) {
+                        $parts = explode(' | ', $trimmedLine, 2);
+                        $currentEntry['message'] = trim($parts[0]);
+                        // Parse the context part as key=value pairs
+                        $contextPart = trim($parts[1]);
+                        if ($contextPart !== '') {
+                            $detailLines[] = $contextPart;
+                        }
+                    } else {
+                        $currentEntry['message'] = $trimmedLine;
+                    }
+                } else {
+                    // Already have a message, this is additional context
+                    $detailLines[] = $trimmedLine;
+                }
             }
         }
 
@@ -1002,5 +1333,98 @@ final class LoggerController extends BaseController
     {
         return $this->request?->getHeaderLine('X-Requested-With') === 'XMLHttpRequest'
             || str_contains($this->request?->getHeaderLine('Accept') ?? '', 'application/json');
+    }
+
+    /**
+     * Validate log filename for security
+     */
+    private function isValidLogFilename(string $filename): bool
+    {
+        // Allowed formats:
+        // - channel-YYYY-MM-DD.log (e.g., security-2026-01-28.log)
+        // - php_errors.log, php-errors.log, php_error.log
+        // - php-fpm*.log
+        // - error.log, access.log (system logs)
+        $validPatterns = [
+            '/^[a-z_]+-\d{4}-\d{2}-\d{2}\.log$/',  // channel-date.log
+            '/^php[_-]?errors?\.log$/i',            // php_errors.log, php-error.log, phperrors.log
+            '/^php-fpm.*\.log$/i',                  // php-fpm*.log
+            '/^(error|access|www-error|www-access)\.log$/i',  // system logs
+        ];
+
+        foreach ($validPatterns as $pattern) {
+            if (preg_match($pattern, $filename)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Resolve log file path - check logsPath first, then system paths
+     */
+    private function resolveLogFilePath(string $filename): ?string
+    {
+        // 1. Check in application logs directory
+        $appPath = $this->logsPath . '/' . $filename;
+        if (file_exists($appPath) && is_readable($appPath)) {
+            return $appPath;
+        }
+
+        // 2. Check PHP error log from ini
+        if (preg_match('/^php[_-]?errors?\.log$/i', $filename)) {
+            $phpErrorLog = ini_get('error_log');
+            if ($phpErrorLog && file_exists($phpErrorLog) && is_readable($phpErrorLog)) {
+                return $phpErrorLog;
+            }
+        }
+
+        // 3. Check common system log paths
+        $systemPaths = [
+            '/var/log/' . $filename,
+            '/var/log/php/' . $filename,
+            '/var/log/php-fpm/' . $filename,
+            '/usr/local/var/log/' . $filename,
+        ];
+
+        foreach ($systemPaths as $path) {
+            if (file_exists($path) && is_readable($path)) {
+                return $path;
+            }
+        }
+
+        // 4. Return app path even if doesn't exist (for error handling)
+        return $appPath;
+    }
+
+    /**
+     * Ensure timezone is properly set from environment or config
+     *
+     * Priority:
+     * 1. APP_TIMEZONE environment variable
+     * 2. date.timezone from php.ini
+     * 3. Default to Europe/Rome
+     */
+    private function ensureTimezone(): void
+    {
+        $timezone = $_ENV['APP_TIMEZONE'] ?? getenv('APP_TIMEZONE') ?: null;
+
+        if ($timezone === null) {
+            $iniTimezone = ini_get('date.timezone');
+            if ($iniTimezone) {
+                $timezone = $iniTimezone;
+            }
+        }
+
+        if ($timezone === null) {
+            $timezone = 'Europe/Rome';
+        }
+
+        try {
+            date_default_timezone_set($timezone);
+        } catch (\Throwable $e) {
+            date_default_timezone_set('Europe/Rome');
+        }
     }
 }

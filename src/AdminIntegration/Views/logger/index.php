@@ -126,13 +126,18 @@ $debugLevels = ['debug', 'info', 'notice'];
         <?php endif; ?>
 
         <!-- Level Selector -->
+        <?php
+        // Get allowed levels for this channel (null = all levels allowed)
+        $allowedLevels = $channel['allowed_levels'] ?? null;
+        $channelLevels = $allowedLevels !== null ? $allowedLevels : $levels;
+        ?>
         <div class="eap-logger-channel-card__controls">
             <div class="eap-logger-channel-card__level-row">
                 <label class="eap-logger-channel-card__level-label">Min Level:</label>
                 <select class="eap-logger-channel-card__level-select channel-level"
                         data-channel="<?= htmlspecialchars($key) ?>"
                         data-original="<?= htmlspecialchars($channel['level']) ?>">
-                    <?php foreach ($levels as $level): ?>
+                    <?php foreach ($channelLevels as $level): ?>
                     <option value="<?= $level ?>" <?= $channel['level'] === $level ? 'selected' : '' ?>>
                         <?= ucfirst($level) ?>
                     </option>
@@ -208,6 +213,47 @@ $debugLevels = ['debug', 'info', 'notice'];
         <span class="eap-badge eap-badge--secondary"><?= count($log_files) ?> files</span>
     </div>
 
+    <?php if (!empty($log_files)): ?>
+    <!-- Bulk Actions Bar -->
+    <div class="eap-logger-bulk-actions">
+        <div class="eap-logger-bulk-actions__left">
+            <label class="eap-checkbox">
+                <input type="checkbox" id="select-all-files" class="eap-checkbox__input">
+                <span class="eap-checkbox__label">Select All</span>
+            </label>
+            <span class="eap-logger-bulk-actions__count">
+                <span id="selected-count">0</span> selected
+            </span>
+        </div>
+        <div class="eap-logger-bulk-actions__right">
+            <button type="button" class="eap-btn eap-btn--secondary eap-btn--sm" id="bulk-download-btn" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Download Selected
+            </button>
+            <button type="button" class="eap-btn eap-btn--danger eap-btn--sm" id="bulk-clear-btn" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+                Clear Selected
+            </button>
+            <button type="button" class="eap-btn eap-btn--danger eap-btn--sm" id="bulk-delete-btn" disabled>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                </svg>
+                Delete Selected
+            </button>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div class="eap-card__body">
         <?php if (empty($log_files)): ?>
         <div class="eap-logger-empty-state">
@@ -225,7 +271,12 @@ $debugLevels = ['debug', 'info', 'notice'];
             $isToday = $file['date'] === $today;
                 $channelColor = $file['color'] ?? 'gray';
                 ?>
-            <div class="eap-logger-file-card eap-logger-file-card--<?= $channelColor ?> <?= $isToday ? 'eap-logger-file-card--today' : '' ?>">
+            <div class="eap-logger-file-card eap-logger-file-card--<?= $channelColor ?> <?= $isToday ? 'eap-logger-file-card--today' : '' ?>"
+                 data-filename="<?= htmlspecialchars($file['name']) ?>">
+                <!-- Checkbox for bulk selection -->
+                <label class="eap-logger-file-card__checkbox">
+                    <input type="checkbox" class="file-checkbox" data-file="<?= htmlspecialchars($file['name']) ?>">
+                </label>
                 <a href="<?= htmlspecialchars($admin_base_path) ?>/logger/view?file=<?= urlencode($file['name']) ?>" class="eap-logger-file-card__link">
                     <div class="eap-logger-file-card__header">
                         <div class="eap-logger-file-card__icon">
@@ -283,6 +334,18 @@ $debugLevels = ['debug', 'info', 'notice'];
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
     </svg>
     <span>Logs directory: <code><?= htmlspecialchars($logs_path) ?></code></span>
+</div>
+
+<!-- Timezone Info -->
+<div class="eap-logger-path-info">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <?= $getIcon('clock') ?>
+    </svg>
+    <span>
+        Server time: <code><?= htmlspecialchars($server_time ?? date('Y-m-d H:i:s')) ?></code>
+        &nbsp;|&nbsp;
+        Timezone: <code><?= htmlspecialchars($timezone ?? date_default_timezone_get()) ?></code>
+    </span>
 </div>
 
 <!-- Hidden data for JavaScript -->

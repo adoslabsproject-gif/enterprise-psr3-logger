@@ -750,6 +750,16 @@
     border-radius: 6px;
 }
 
+.eap-logger-entry__meta {
+    font-family: var(--eap-font-mono, monospace);
+    font-size: 11px;
+    color: var(--eap-text-muted, #6e7681);
+    background: var(--eap-void, #0d1117);
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: auto;
+}
+
 /* Entry Body */
 .eap-logger-entry__body {
     padding: 16px;
@@ -1401,4 +1411,476 @@
 .eap-badge--success {
     background: rgba(0, 255, 136, 0.1);
     color: var(--eap-neon-green, #00ff88);
+}
+
+/* ==========================================================================
+   Bulk Actions
+   ========================================================================== */
+
+.eap-logger-bulk-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--eap-elevated, #30363d);
+    border-bottom: 1px solid var(--eap-border, #3d444d);
+}
+
+.eap-logger-bulk-actions__left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.eap-logger-bulk-actions__right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.eap-logger-bulk-actions__count {
+    font-size: 13px;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.eap-checkbox__input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--eap-neon-cyan, #00d4ff);
+    cursor: pointer;
+}
+
+.eap-checkbox__label {
+    font-size: 13px;
+    color: var(--eap-text-secondary, #8b949e);
+}
+
+/* File card checkbox */
+.eap-logger-file-card__checkbox {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+}
+
+.eap-logger-file-card__checkbox input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--eap-neon-cyan, #00d4ff);
+    cursor: pointer;
+}
+
+.eap-logger-file-card {
+    position: relative;
+}
+
+.eap-logger-file-card__link {
+    padding-left: 40px;
+}
+
+/* ==========================================================================
+   Context Inline Display (Always Visible - No Toggle)
+   ========================================================================== */
+
+.eap-logger-entry__context-data {
+    margin-top: 12px;
+    background: var(--eap-abyss, #161b22);
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: var(--eap-font-mono, 'JetBrains Mono', monospace);
+    font-size: 12px;
+    line-height: 1.8;
+}
+
+.eap-logger-entry__context-line {
+    color: var(--eap-text-secondary, #8b949e);
+    padding: 3px 0;
+    word-break: break-word;
+}
+
+/* Key-value highlighting */
+.eap-logger-entry__context-line::before {
+    content: '\2022';
+    color: var(--eap-neon-cyan, #00d4ff);
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+/* Stack trace lines */
+.eap-logger-entry__context-line--stack {
+    color: var(--eap-neon-orange, #ffb86c);
+    font-size: 11px;
+    padding-left: 16px;
+}
+
+.eap-logger-entry__context-line--stack::before {
+    content: '\21B3';
+    color: var(--eap-text-muted, #6e7681);
+}
+
+/* Exception lines */
+.eap-logger-entry__context-line--exception {
+    color: var(--eap-neon-red, #ff5555);
+    font-weight: 500;
+    border-left: 3px solid var(--eap-neon-red, #ff5555);
+    padding-left: 12px;
+    margin-left: -16px;
+    padding-right: 12px;
+    background: rgba(255, 85, 85, 0.05);
+}
+
+.eap-logger-entry__context-line--exception::before {
+    content: '\26A0';
+    color: var(--eap-neon-red, #ff5555);
+}
+
+/* ==========================================================================
+   Telegram Configuration Page
+   ========================================================================== */
+
+.eap-logger-telegram-page {
+    max-width: 1200px;
+}
+
+.eap-logger-telegram-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+}
+
+@media (max-width: 900px) {
+    .eap-logger-telegram-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.eap-logger-back-link {
+    margin-bottom: 8px;
+    display: inline-flex;
+}
+
+/* Enable Toggle */
+.eap-logger-enable-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
+    background: var(--eap-abyss, #161b22);
+    border-radius: 8px;
+    margin-bottom: 24px;
+}
+
+.eap-logger-enable-toggle__switch {
+    position: relative;
+    width: 50px;
+    height: 26px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.eap-logger-enable-toggle__input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.eap-logger-enable-toggle__slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--eap-border, #3d444d);
+    transition: 0.3s;
+    border-radius: 26px;
+}
+
+.eap-logger-enable-toggle__slider::before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--eap-text-secondary, #8b949e);
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.eap-logger-enable-toggle__input:checked + .eap-logger-enable-toggle__slider {
+    background-color: var(--eap-neon-green, #00ff88);
+}
+
+.eap-logger-enable-toggle__input:checked + .eap-logger-enable-toggle__slider::before {
+    transform: translateX(24px);
+    background-color: var(--eap-void, #0d1117);
+}
+
+.eap-logger-enable-toggle__text {
+    flex: 1;
+}
+
+.eap-logger-enable-toggle__title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--eap-text-primary, #e6edf3);
+    margin: 0 0 4px 0;
+}
+
+.eap-logger-enable-toggle__desc {
+    font-size: 13px;
+    color: var(--eap-text-muted, #6e7681);
+    margin: 0;
+}
+
+/* Form sections */
+.eap-logger-form-section {
+    margin-bottom: 24px;
+}
+
+.eap-logger-form-section__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--eap-text-primary, #e6edf3);
+    margin: 0 0 16px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--eap-border, #3d444d);
+}
+
+.eap-logger-form-group {
+    margin-bottom: 16px;
+}
+
+.eap-logger-form-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--eap-text-secondary, #8b949e);
+    margin-bottom: 6px;
+}
+
+.eap-logger-form-input,
+.eap-logger-form-select {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 8px;
+    font-size: 14px;
+    background: var(--eap-abyss, #161b22);
+    color: var(--eap-text-primary, #e6edf3);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.eap-logger-form-input:focus,
+.eap-logger-form-select:focus {
+    outline: none;
+    border-color: var(--eap-neon-cyan, #00d4ff);
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+}
+
+.eap-logger-form-hint {
+    font-size: 12px;
+    color: var(--eap-text-muted, #6e7681);
+    margin-top: 6px;
+}
+
+.eap-logger-form-hint a {
+    color: var(--eap-neon-cyan, #00d4ff);
+    text-decoration: none;
+}
+
+.eap-logger-form-hint a:hover {
+    text-decoration: underline;
+}
+
+/* Channel checkboxes */
+.eap-logger-channel-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+
+.eap-logger-channel-checkbox:hover {
+    background: var(--eap-surface, #21262d);
+}
+
+.eap-logger-channel-checkbox--disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.eap-logger-channel-checkbox__input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--eap-neon-cyan, #00d4ff);
+    cursor: pointer;
+}
+
+.eap-logger-channel-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4px;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--eap-abyss, #161b22);
+    border-radius: 8px;
+}
+
+@media (max-width: 500px) {
+    .eap-logger-channel-checkboxes {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Button group */
+.eap-button-group {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--eap-border, #3d444d);
+}
+
+/* Test result */
+.eap-logger-test-result {
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-top: 16px;
+    font-size: 13px;
+}
+
+.eap-logger-test-result:empty {
+    display: none;
+}
+
+.eap-logger-test-result--success {
+    background: rgba(0, 255, 136, 0.1);
+    color: var(--eap-neon-green, #00ff88);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+}
+
+.eap-logger-test-result--error {
+    background: rgba(255, 85, 85, 0.1);
+    color: var(--eap-neon-red, #ff5555);
+    border: 1px solid rgba(255, 85, 85, 0.3);
+}
+
+/* Info card */
+.eap-logger-info-card {
+    background: var(--eap-surface, #21262d);
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.eap-logger-info-card__title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--eap-text-primary, #e6edf3);
+    margin: 0 0 12px 0;
+}
+
+.eap-logger-info-card__title svg {
+    color: var(--eap-neon-cyan, #00d4ff);
+}
+
+.eap-logger-info-card__content {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--eap-text-secondary, #8b949e);
+}
+
+.eap-logger-info-card__content p {
+    margin: 0 0 8px 0;
+}
+
+.eap-logger-info-card__content p:last-child {
+    margin-bottom: 0;
+}
+
+/* Steps */
+.eap-logger-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.eap-logger-step {
+    display: flex;
+    gap: 16px;
+}
+
+.eap-logger-step__number {
+    width: 32px;
+    height: 32px;
+    background: var(--eap-neon-cyan, #00d4ff);
+    color: var(--eap-void, #0d1117);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.eap-logger-step__content {
+    flex: 1;
+    padding-top: 4px;
+}
+
+.eap-logger-step__title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--eap-text-primary, #e6edf3);
+    margin: 0 0 4px 0;
+}
+
+.eap-logger-step__desc {
+    font-size: 13px;
+    color: var(--eap-text-secondary, #8b949e);
+    margin: 0;
+}
+
+.eap-logger-step__desc code {
+    background: var(--eap-abyss, #161b22);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--eap-neon-cyan, #00d4ff);
+}
+
+.eap-logger-step__desc a {
+    color: var(--eap-neon-cyan, #00d4ff);
+    text-decoration: none;
+}
+
+.eap-logger-step__desc a:hover {
+    text-decoration: underline;
+}
+
+/* ==========================================================================
+   Timezone Info (additional margin)
+   ========================================================================== */
+
+.eap-logger-path-info + .eap-logger-path-info {
+    margin-top: 8px;
 }

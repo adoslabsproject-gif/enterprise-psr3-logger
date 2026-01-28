@@ -135,6 +135,21 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
         <div class="eap-logger-entries">
             <?php foreach ($lines as $index => $line): ?>
             <div class="eap-logger-entry eap-logger-entry--<?= $getLevelClass($line['level']) ?>">
+                <?php
+                // Separate metadata (pid, mem, req) from actual context data
+                $metadata = [];
+                $contextData = [];
+                if (!empty($line['details'])) {
+                    foreach ($line['details'] as $detail) {
+                        // Check if it's metadata (pid:xxx, mem:xxx, req:xxx)
+                        if (preg_match('/^(pid|mem|req|duration):/', $detail)) {
+                            $metadata[] = $detail;
+                        } else {
+                            $contextData[] = $detail;
+                        }
+                    }
+                }
+                ?>
                 <!-- Header -->
                 <div class="eap-logger-entry__header">
                     <span class="eap-logger-entry__number">#<?= number_format(($page - 1) * $per_page + $index + 1) ?></span>
@@ -147,27 +162,61 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
                     <span class="eap-badge eap-badge--<?= $getLevelClass($line['level']) ?> eap-logger-entry__level">
                         <?= strtoupper($line['level']) ?>
                     </span>
+                    <?php foreach ($metadata as $meta): ?>
+                    <span class="eap-logger-entry__meta"><?= htmlspecialchars($meta) ?></span>
+                    <?php endforeach; ?>
                 </div>
 
                 <!-- Body -->
                 <div class="eap-logger-entry__body">
+                    <?php if (!empty($line['message'])): ?>
                     <div class="eap-logger-entry__message"><?= htmlspecialchars($line['message']) ?></div>
+                    <?php endif; ?>
 
-                    <?php if (!empty($line['details'])): ?>
-                    <div class="eap-logger-entry__details">
-                        <?php foreach ($line['details'] as $detail):
+                    <?php
+                    // Combine context data for inline display (metadata already shown in header)
+                    $allContext = $contextData; // Already filtered above
+
+                    // Add context if it's not already in details
+                    if ($line['context'] && empty($contextData)) {
+                        // Try to decode JSON context
+                        $jsonContextData = json_decode($line['context'], true);
+                        if ($jsonContextData !== null && is_array($jsonContextData)) {
+                            // Format as key=value pairs
+                            foreach ($jsonContextData as $key => $value) {
+                                if (is_scalar($value)) {
+                                    $allContext[] = $key . '=' . $value;
+                                } elseif (is_array($value)) {
+                                    $allContext[] = $key . '=' . json_encode($value, JSON_UNESCAPED_SLASHES);
+                                } else {
+                                    $allContext[] = $key . '=' . (string)$value;
+                                }
+                            }
+                        } else {
+                            // Plain text context - split by newlines or show as-is
+                            $contextLines = preg_split('/\r?\n/', $line['context']);
+                            foreach ($contextLines as $ctxLine) {
+                                if (trim($ctxLine) !== '') {
+                                    $allContext[] = trim($ctxLine);
+                                }
+                            }
+                        }
+                    }
+                    ?>
+
+                    <?php if (!empty($allContext)): ?>
+                    <div class="eap-logger-entry__context-data">
+                        <?php foreach ($allContext as $ctxItem):
                             // Check if it's a stack trace line
-                            $isStack = str_starts_with(trim($detail), '#') || str_contains($detail, '->') || str_contains($detail, '::');
-                            $class = $isStack ? 'eap-logger-entry__detail-line eap-logger-entry__detail-line--stack' : 'eap-logger-entry__detail-line';
-                            ?>
-                        <div class="<?= $class ?>"><?= htmlspecialchars($detail) ?></div>
+                            $isStack = str_starts_with(trim($ctxItem), '#') || str_contains($ctxItem, '->') || str_contains($ctxItem, '::');
+                            // Check if it's an exception line
+                            $isException = str_contains($ctxItem, 'Exception') || str_contains($ctxItem, 'Error in ');
+                            $class = 'eap-logger-entry__context-line';
+                            if ($isStack) $class .= ' eap-logger-entry__context-line--stack';
+                            if ($isException) $class .= ' eap-logger-entry__context-line--exception';
+                        ?>
+                        <div class="<?= $class ?>"><?= htmlspecialchars($ctxItem) ?></div>
                         <?php endforeach; ?>
-                    </div>
-                    <?php elseif ($line['context']): ?>
-                    <div class="eap-logger-entry__context">
-                        <button type="button" class="eap-logger-context-btn" data-context="<?= htmlspecialchars($line['context']) ?>">
-                            Show JSON Context
-                        </button>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -239,19 +288,6 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
     </div>
 </div>
 <?php endif; ?>
-
-<!-- Context Modal -->
-<div id="context-modal" class="eap-logger-modal-overlay hidden">
-    <div class="eap-logger-modal">
-        <div class="eap-logger-modal__header">
-            <h3 class="eap-logger-modal__title">Log Context</h3>
-            <button type="button" class="eap-logger-modal__close">&times;</button>
-        </div>
-        <div class="eap-logger-modal__body">
-            <pre id="context-content"></pre>
-        </div>
-    </div>
-</div>
 
 <!-- JS handlers in /module-assets/enterprise-psr3-logger/js/logger.js -->
 <?php endif; ?>
