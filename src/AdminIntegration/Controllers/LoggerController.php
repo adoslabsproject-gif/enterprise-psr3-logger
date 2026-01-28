@@ -150,6 +150,13 @@ final class LoggerController extends BaseController
             'color' => 'green',
             'file_prefix' => 'nginx',
         ],
+        'js_errors' => [
+            'name' => 'JavaScript Errors',
+            'description' => 'Client-side JavaScript errors, exceptions, and console logs',
+            'icon' => 'code',
+            'color' => 'yellow',
+            'file_prefix' => 'js_errors',
+        ],
     ];
 
     private string $logsPath;
@@ -984,6 +991,159 @@ final class LoggerController extends BaseController
     }
 
     // =========================================================================
+    // JavaScript Error Logging API
+    // =========================================================================
+
+    /**
+     * Log JavaScript errors from client-side
+     * POST /api/log/js-error
+     *
+     * This is a public endpoint (no auth required) for client-side error reporting.
+     * Uses rate limiting and validation to prevent abuse.
+     *
+     * Expected JSON payload:
+     * {
+     *   "level": "error",           // error, warning, info, debug
+     *   "message": "Error message",
+     *   "stack": "stack trace...",  // Optional
+     *   "url": "page URL",
+     *   "line": 123,                // Optional
+     *   "column": 45,               // Optional
+     *   "userAgent": "...",         // Optional
+     *   "extra": {}                 // Optional additional context
+     * }
+     */
+    public function logJsError(): Response
+    {
+        // Set CORS headers for browser requests
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: POST, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type');
+
+        // Handle preflight OPTIONS request
+        if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+            return $this->json(['ok' => true]);
+        }
+
+        // Rate limiting by IP (100 errors per minute per IP)
+        $clientIp = $this->getClientIp();
+        $rateCheck = $this->rateLimiter->attempt("js_error:{$clientIp}", 'api');
+        if (!$rateCheck['allowed']) {
+            return $this->json([
+                'success' => false,
+                'message' => 'Rate limit exceeded',
+                'retry_after' => $rateCheck['retry_after'],
+            ], 429);
+        }
+
+        // Parse JSON body
+        $json = file_get_contents('php://input');
+        $data = json_decode($json, true);
+
+        if (!is_array($data)) {
+            return $this->json(['success' => false, 'message' => 'Invalid JSON'], 400);
+        }
+
+        // Validate required fields
+        $message = $data['message'] ?? '';
+        if (empty($message) || strlen($message) > 10000) {
+            return $this->json(['success' => false, 'message' => 'Invalid message'], 400);
+        }
+
+        // Sanitize and extract fields
+        $level = $this->normalizeJsLevel($data['level'] ?? 'error');
+        $message = $this->sanitizeJsInput($message, 2000);
+        $stack = $this->sanitizeJsInput($data['stack'] ?? '', 5000);
+        $url = $this->sanitizeJsInput($data['url'] ?? '', 500);
+        $line = isset($data['line']) ? (int) $data['line'] : null;
+        $column = isset($data['column']) ? (int) $data['column'] : null;
+        $userAgent = $this->sanitizeJsInput($data['userAgent'] ?? $_SERVER['HTTP_USER_AGENT'] ?? '', 500);
+        $extra = is_array($data['extra'] ?? null) ? $data['extra'] : [];
+
+        // Build context
+        $context = [
+            'source' => 'javascript',
+            'url' => $url,
+            'user_agent' => $userAgent,
+            'ip' => $clientIp,
+        ];
+
+        if ($line !== null) {
+            $context['line'] = $line;
+        }
+        if ($column !== null) {
+            $context['column'] = $column;
+        }
+        if (!empty($stack)) {
+            $context['stack'] = $stack;
+        }
+        if (!empty($extra)) {
+            $context['extra'] = $extra;
+        }
+
+        // Add session user ID if available
+        try {
+            $user = $this->getUser();
+            if (!empty($user['id'])) {
+                $context['user_id'] = $user['id'];
+            }
+        } catch (\Throwable $e) {
+            // No session, skip user ID
+        }
+
+        // Log to js_errors channel
+        $logger = Logger::channel('js_errors');
+
+        match ($level) {
+            'debug' => $logger->debug($message, $context),
+            'info' => $logger->info($message, $context),
+            'notice' => $logger->notice($message, $context),
+            'warning' => $logger->warning($message, $context),
+            'critical' => $logger->critical($message, $context),
+            default => $logger->error($message, $context),
+        };
+
+        return $this->json(['success' => true]);
+    }
+
+    /**
+     * Normalize JavaScript log level to PSR-3 level
+     */
+    private function normalizeJsLevel(string $level): string
+    {
+        $level = strtolower(trim($level));
+
+        return match ($level) {
+            'log', 'debug', 'trace' => 'debug',
+            'info' => 'info',
+            'warn', 'warning' => 'warning',
+            'error' => 'error',
+            'critical', 'fatal' => 'critical',
+            default => 'error',
+        };
+    }
+
+    /**
+     * Sanitize JavaScript input to prevent log injection
+     */
+    private function sanitizeJsInput(mixed $input, int $maxLength): string
+    {
+        if (!is_string($input)) {
+            return '';
+        }
+
+        // Remove null bytes and control characters (except newlines and tabs)
+        $clean = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $input);
+
+        // Limit length
+        if (strlen($clean) > $maxLength) {
+            $clean = substr($clean, 0, $maxLength) . '...';
+        }
+
+        return $clean;
+    }
+
+    // =========================================================================
     // Private Helpers
     // =========================================================================
 
@@ -1056,6 +1216,8 @@ final class LoggerController extends BaseController
                 $channel = 'php-fpm';
             } elseif (str_starts_with($file, 'nginx-')) {
                 $channel = 'nginx';
+            } elseif (str_starts_with($file, 'js_errors')) {
+                $channel = 'js_errors';
             }
 
             // Extract date
@@ -1621,6 +1783,10 @@ final class LoggerController extends BaseController
             // Nginx logs
             '/^nginx-access\.log$/i',
             '/^nginx-error\.log$/i',
+
+            // JavaScript error logs: js_errors-YYYY-MM-DD.log
+            '/^js_errors-\d{4}-\d{2}-\d{2}\.log$/',
+            '/^js_errors\.log$/i',
 
             // System error/access logs
             '/^(error|access)\.log$/i',

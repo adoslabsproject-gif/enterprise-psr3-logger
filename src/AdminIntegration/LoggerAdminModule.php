@@ -145,6 +145,9 @@ final class LoggerAdminModule implements AdminModuleInterface
             ['method' => 'GET', 'path' => '/logger/telegram', 'handler' => [$controller, 'telegram']],
             ['method' => 'POST', 'path' => '/logger/telegram/update', 'handler' => [$controller, 'updateTelegram']],
             ['method' => 'POST', 'path' => '/logger/telegram/test', 'handler' => [$controller, 'testTelegram']],
+
+            // JavaScript Error Logging API (public endpoint, no auth required)
+            ['method' => 'POST', 'path' => '/api/log/js-error', 'handler' => [$controller, 'logJsError'], 'public' => true],
         ];
     }
 
