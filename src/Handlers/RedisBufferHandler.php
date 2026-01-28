@@ -53,7 +53,6 @@ class RedisBufferHandler extends AbstractProcessingHandler
      */
     private const DEFAULT_MAX_QUEUE_SIZE = 100000;
 
-
     /**
      * Trim check interval (every N writes)
      */
