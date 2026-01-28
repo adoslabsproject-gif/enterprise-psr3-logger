@@ -1,6 +1,12 @@
 /**
  * PSR-3 Logger Admin Integration JavaScript
  *
+ * Features:
+ * - Toggle for enable/disable channel (instant save)
+ * - Level selector with explicit Save button
+ * - Auto-reset countdown timer for debug levels
+ * - STATELESS CSRF: Token remains valid for 60 minutes
+ *
  * CSP-compliant - external script file
  */
 (function() {
@@ -9,6 +15,7 @@
     // Get config from hidden inputs (CSP-safe way)
     var adminBasePathEl = document.getElementById('logger-admin-base-path');
     var csrfTokenEl = document.getElementById('logger-csrf-token');
+    var autoResetHoursEl = document.getElementById('logger-auto-reset-hours');
 
     if (!adminBasePathEl) {
         // Not on logger page
@@ -17,13 +24,93 @@
 
     var adminBasePath = adminBasePathEl.value;
     var csrfToken = csrfTokenEl ? csrfTokenEl.value : '';
+    var autoResetHours = autoResetHoursEl ? parseInt(autoResetHoursEl.value, 10) : 8;
+
+    // Debug levels that trigger auto-reset
+    var debugLevels = ['debug', 'info', 'notice'];
 
     // ==========================================================================
-    // Channel Management
+    // Auto-Reset Toggle - Enable/disable automatic reset to WARNING after 8h
+    // ==========================================================================
+
+    function initAutoResetToggles() {
+        document.querySelectorAll('.auto-reset-toggle').forEach(function(toggle) {
+            toggle.addEventListener('change', function() {
+                var channel = this.dataset.channel;
+                var card = this.closest('.eap-logger-channel-card');
+                var channelToggle = card.querySelector('.channel-toggle');
+                var levelSelect = card.querySelector('.channel-level');
+                var autoResetHint = card.querySelector('.eap-logger-channel-card__auto-reset-hint');
+                var autoResetCountdown = card.querySelector('.eap-logger-channel-card__auto-reset-countdown');
+                var isEnabled = this.checked;
+
+                // Update hint text
+                if (autoResetHint) {
+                    autoResetHint.textContent = isEnabled
+                        ? 'After ' + autoResetHours + 'h if level < WARNING'
+                        : 'Disabled - level stays until manually changed';
+                }
+
+                // Save immediately
+                saveAutoResetToggle(channel, channelToggle ? channelToggle.checked : true, levelSelect ? levelSelect.value : 'warning', isEnabled, card);
+            });
+        });
+    }
+
+    /**
+     * Save auto-reset toggle change (instant)
+     */
+    function saveAutoResetToggle(channel, enabled, level, autoResetEnabled, card) {
+        fetch(adminBasePath + '/logger/channel/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': csrfToken
+            },
+            body: '_csrf_token=' + encodeURIComponent(csrfToken) +
+                  '&channel=' + encodeURIComponent(channel) +
+                  '&enabled=' + (enabled ? '1' : '0') +
+                  '&level=' + encodeURIComponent(level) +
+                  '&auto_reset_enabled=' + (autoResetEnabled ? '1' : '0')
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var message = autoResetEnabled ? 'Auto-reset enabled' : 'Auto-reset disabled';
+                showToast(message, 'success');
+
+                // Update countdown display
+                var countdown = card.querySelector('.eap-logger-channel-card__auto-reset-countdown');
+                if (data.auto_reset_at && autoResetEnabled) {
+                    if (countdown) {
+                        countdown.classList.remove('hidden');
+                        countdown.dataset.resetTimestamp = new Date(data.auto_reset_at).getTime() / 1000;
+                        updateSingleTimer(countdown);
+                    }
+                } else if (countdown) {
+                    countdown.classList.add('hidden');
+                }
+            } else {
+                showToast('Error: ' + (data.message || 'Failed'), 'error');
+                // Revert toggle
+                var toggle = card.querySelector('.auto-reset-toggle');
+                if (toggle) {
+                    toggle.checked = !toggle.checked;
+                }
+            }
+        })
+        .catch(function(err) {
+            showToast('Network error: ' + err.message, 'error');
+        });
+    }
+
+    // ==========================================================================
+    // Channel Management - Toggle & Level with Save Button
     // ==========================================================================
 
     function initChannelManagement() {
-        // Channel toggle switches
+        // Channel toggle switches (instant save for enable/disable)
         document.querySelectorAll('.channel-toggle').forEach(function(toggle) {
             toggle.addEventListener('change', function() {
                 var channel = this.dataset.channel;
@@ -31,38 +118,78 @@
                 var levelSelect = card.querySelector('.channel-level');
 
                 card.classList.toggle('eap-logger-channel-card--disabled', !this.checked);
-                saveChannel(channel, this.checked, levelSelect.value);
+
+                // Save immediately for toggle
+                saveChannelToggle(channel, this.checked, levelSelect ? levelSelect.value : 'warning');
             });
         });
 
-        // Channel level selects
+        // Channel level selects - show Save button on change
         document.querySelectorAll('.channel-level').forEach(function(select) {
             select.addEventListener('change', function() {
                 var channel = this.dataset.channel;
                 var card = this.closest('.eap-logger-channel-card');
-                var toggle = card.querySelector('.channel-toggle');
+                var saveBtn = card.querySelector('.channel-save-btn');
+                var debugWarning = card.querySelector('.eap-logger-channel-card__debug-warning');
+                var originalLevel = this.dataset.original;
+                var newLevel = this.value;
 
-                saveChannel(channel, toggle.checked, this.value);
+                // Show/hide save button based on whether level changed (CSP-compliant)
+                if (newLevel !== originalLevel) {
+                    saveBtn.classList.remove('hidden');
+                    saveBtn.classList.add('eap-btn--pulse');
+                } else {
+                    saveBtn.classList.add('hidden');
+                    saveBtn.classList.remove('eap-btn--pulse');
+                }
+
+                // Show/hide debug warning (CSP-compliant)
+                var isDebugLevel = debugLevels.indexOf(newLevel) !== -1;
+                if (debugWarning) {
+                    debugWarning.classList.toggle('hidden', !isDebugLevel);
+                }
+
+                // Update card debug mode class
+                card.classList.toggle('eap-logger-channel-card--debug-mode', isDebugLevel);
+            });
+        });
+
+        // Save buttons for level changes
+        document.querySelectorAll('.channel-save-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var channel = this.dataset.channel;
+                var card = this.closest('.eap-logger-channel-card');
+                var toggle = card.querySelector('.channel-toggle');
+                var levelSelect = card.querySelector('.channel-level');
+                var autoResetToggle = card.querySelector('.auto-reset-toggle');
+                var autoResetEnabled = autoResetToggle ? autoResetToggle.checked : true;
+
+                saveChannelLevel(channel, toggle ? toggle.checked : true, levelSelect.value, autoResetEnabled, btn, levelSelect, card);
             });
         });
     }
 
-    function saveChannel(channel, enabled, level) {
+    /**
+     * Save channel toggle (enable/disable) - instant
+     */
+    function saveChannelToggle(channel, enabled, level) {
         fetch(adminBasePath + '/logger/channel/update', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest'
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': csrfToken
             },
             body: '_csrf_token=' + encodeURIComponent(csrfToken) +
                   '&channel=' + encodeURIComponent(channel) +
                   '&enabled=' + (enabled ? '1' : '0') +
-                  '&level=' + encodeURIComponent(level)
+                  '&level=' + encodeURIComponent(level) +
+                  '&toggle_only=1'
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             showToast(
-                data.success ? 'Channel updated' : 'Error: ' + (data.message || 'Failed'),
+                data.success ? 'Channel ' + (enabled ? 'enabled' : 'disabled') : 'Error: ' + (data.message || 'Failed'),
                 data.success ? 'success' : 'error'
             );
         })
@@ -71,85 +198,163 @@
         });
     }
 
-    // ==========================================================================
-    // Log Selection & Deletion
-    // ==========================================================================
+    /**
+     * Save channel level with explicit Save button
+     */
+    function saveChannelLevel(channel, enabled, level, autoResetEnabled, btn, select, card) {
+        var originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="eap-spinner"></span> Saving...';
 
-    function initLogManagement() {
-        var selectAll = document.getElementById('select-all');
-        var deleteBtn = document.getElementById('delete-selected');
+        fetch(adminBasePath + '/logger/channel/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': csrfToken
+            },
+            body: '_csrf_token=' + encodeURIComponent(csrfToken) +
+                  '&channel=' + encodeURIComponent(channel) +
+                  '&enabled=' + (enabled ? '1' : '0') +
+                  '&level=' + encodeURIComponent(level) +
+                  '&auto_reset_enabled=' + (autoResetEnabled ? '1' : '0')
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                // Update original value
+                select.dataset.original = level;
+                // Hide save button (CSP-compliant)
+                btn.classList.add('hidden');
+                btn.classList.remove('eap-btn--pulse');
 
-        if (!selectAll || !deleteBtn) {
-            return;
+                // Update auto-reset countdown if needed
+                var countdown = card.querySelector('.eap-logger-channel-card__auto-reset-countdown');
+                if (data.auto_reset_at && autoResetEnabled) {
+                    if (countdown) {
+                        countdown.classList.remove('hidden');
+                        countdown.dataset.resetTimestamp = new Date(data.auto_reset_at).getTime() / 1000;
+                        updateSingleTimer(countdown);
+                    } else {
+                        // Create countdown element
+                        updateAutoResetDisplay(card, data.auto_reset_at);
+                    }
+                } else if (countdown) {
+                    countdown.classList.add('hidden');
+                }
+
+                showToast('Level saved: ' + level.charAt(0).toUpperCase() + level.slice(1), 'success');
+            } else {
+                showToast('Error: ' + (data.message || 'Failed'), 'error');
+            }
+        })
+        .catch(function(err) {
+            showToast('Network error: ' + err.message, 'error');
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+
+    /**
+     * Update or create auto-reset countdown display for a card
+     */
+    function updateAutoResetDisplay(card, resetTimestamp) {
+        var existingDiv = card.querySelector('.eap-logger-channel-card__auto-reset-countdown');
+        var timestamp = typeof resetTimestamp === 'string' ? new Date(resetTimestamp).getTime() / 1000 : resetTimestamp;
+
+        if (!existingDiv) {
+            // Create new auto-reset countdown display
+            var autoResetToggleDiv = card.querySelector('.eap-logger-channel-card__auto-reset-toggle');
+            var div = document.createElement('div');
+            div.className = 'eap-logger-channel-card__auto-reset-countdown';
+            div.dataset.resetTimestamp = timestamp;
+            div.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' +
+                '<span>Resets to WARNING in <strong class="auto-reset-time">calculating...</strong></span>';
+            if (autoResetToggleDiv) {
+                autoResetToggleDiv.parentNode.insertBefore(div, autoResetToggleDiv.nextSibling);
+            }
+            existingDiv = div;
+        } else {
+            existingDiv.dataset.resetTimestamp = timestamp;
+            existingDiv.classList.remove('hidden');
         }
 
-        // Select all checkbox
-        selectAll.addEventListener('change', function() {
-            document.querySelectorAll('.log-select').forEach(function(cb) {
-                cb.checked = selectAll.checked;
-            });
-            updateDeleteBtn();
-        });
+        // Update the timer immediately
+        updateSingleTimer(existingDiv);
+    }
 
-        // Individual checkboxes
-        document.querySelectorAll('.log-select').forEach(function(cb) {
-            cb.addEventListener('change', updateDeleteBtn);
-        });
+    // ==========================================================================
+    // Auto-Reset Countdown Timers
+    // ==========================================================================
 
-        // Delete selected button
-        deleteBtn.addEventListener('click', function() {
-            var selected = document.querySelectorAll('.log-select:checked');
-            if (selected.length === 0) return;
-            if (!confirm('Delete ' + selected.length + ' log(s)?')) return;
+    function initAutoResetTimers() {
+        // Update all timers every minute
+        setInterval(updateAllTimers, 60000);
+        // Initial update
+        updateAllTimers();
+    }
 
-            var ids = Array.from(selected).map(function(cb) { return cb.value; });
+    function updateAllTimers() {
+        document.querySelectorAll('.eap-logger-channel-card__auto-reset-countdown').forEach(updateSingleTimer);
+    }
 
-            fetch(adminBasePath + '/logger/logs/delete', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({ ids: ids, _csrf_token: csrfToken })
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success) {
-                    selected.forEach(function(cb) { cb.closest('tr').remove(); });
-                    showToast('Deleted ' + data.deleted + ' log(s)', 'success');
-                    selectAll.checked = false;
-                    updateDeleteBtn();
-                } else {
-                    showToast('Error: ' + (data.message || 'Failed'), 'error');
-                }
-            })
-            .catch(function(err) {
-                showToast('Network error: ' + err.message, 'error');
-            });
-        });
+    function updateSingleTimer(el) {
+        var timestamp = parseInt(el.dataset.resetTimestamp, 10);
+        if (!timestamp) return;
 
-        // Single delete buttons
-        document.querySelectorAll('.delete-log').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var id = this.dataset.id;
-                var row = this.closest('tr');
-                if (!confirm('Delete this log?')) return;
+        var now = Math.floor(Date.now() / 1000);
+        var remaining = timestamp - now;
 
-                fetch(adminBasePath + '/logger/logs/delete', {
+        var timeEl = el.querySelector('.auto-reset-time');
+        if (!timeEl) return;
+
+        if (remaining <= 0) {
+            timeEl.textContent = 'now';
+            // Reload page to reflect the reset
+            setTimeout(function() { location.reload(); }, 2000);
+        } else {
+            var hours = Math.floor(remaining / 3600);
+            var minutes = Math.floor((remaining % 3600) / 60);
+            timeEl.textContent = hours + 'h ' + minutes + 'm';
+        }
+    }
+
+    // ==========================================================================
+    // Log File Management
+    // ==========================================================================
+
+    function initFileClearButtons() {
+        document.querySelectorAll('.clear-file-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                var filename = this.dataset.file;
+                if (!confirm('Clear all contents of "' + filename + '"?')) return;
+
+                fetch(adminBasePath + '/logger/file/clear', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest'
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-Token': csrfToken
                     },
-                    body: JSON.stringify({ ids: [id], _csrf_token: csrfToken })
+                    body: '_csrf_token=' + encodeURIComponent(csrfToken) +
+                          '&file=' + encodeURIComponent(filename)
                 })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
+                    showToast(
+                        data.success ? 'File cleared' : 'Error: ' + (data.message || 'Failed'),
+                        data.success ? 'success' : 'error'
+                    );
                     if (data.success) {
-                        row.remove();
-                        showToast('Log deleted', 'success');
-                    } else {
-                        showToast('Error: ' + (data.message || 'Failed'), 'error');
+                        // Update file size in card
+                        var card = btn.closest('.eap-logger-file-card');
+                        if (card) {
+                            var sizeEl = card.querySelector('.eap-logger-file-card__size');
+                            if (sizeEl) sizeEl.textContent = '0 B';
+                        }
                     }
                 })
                 .catch(function(err) {
@@ -157,12 +362,22 @@
                 });
             });
         });
+    }
 
-        function updateDeleteBtn() {
-            var count = document.querySelectorAll('.log-select:checked').length;
-            deleteBtn.disabled = count === 0;
-            deleteBtn.textContent = count > 0 ? 'Delete Selected (' + count + ')' : 'Delete Selected';
-        }
+    // ==========================================================================
+    // File View - Per Page Selector
+    // ==========================================================================
+
+    function initPerPageSelector() {
+        var select = document.getElementById('per-page-select');
+        if (!select) return;
+
+        select.addEventListener('change', function() {
+            var url = new URL(window.location.href);
+            url.searchParams.set('per_page', this.value);
+            url.searchParams.set('page', '1');
+            window.location.href = url.toString();
+        });
     }
 
     // ==========================================================================
@@ -177,28 +392,25 @@
             return;
         }
 
+        // Context buttons
         document.querySelectorAll('.eap-logger-context-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {
-                content.textContent = this.dataset.context;
+                var ctx = this.dataset.context;
+                try {
+                    var parsed = JSON.parse(ctx);
+                    content.textContent = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    content.textContent = ctx;
+                }
                 modal.classList.remove('hidden');
             });
         });
-    }
 
-    // ==========================================================================
-    // Clear Logs Modal
-    // ==========================================================================
-
-    function initClearModal() {
-        var clearBtn = document.getElementById('clear-old-logs');
-        var modal = document.getElementById('clear-modal');
-
-        if (!clearBtn || !modal) {
-            return;
-        }
-
-        clearBtn.addEventListener('click', function() {
-            modal.classList.remove('hidden');
+        // Close modal on overlay click
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
         });
     }
 
@@ -252,10 +464,10 @@
             return;
         }
 
-        // Toggle settings visibility
+        // Toggle settings visibility (CSP-compliant)
         enabledCheckbox.addEventListener('change', function() {
             if (settingsDiv) {
-                settingsDiv.style.display = this.checked ? 'block' : 'none';
+                settingsDiv.classList.toggle('hidden', !this.checked);
             }
         });
 
@@ -327,9 +539,30 @@
         toast.className = 'eap-logger-toast eap-logger-toast--' + type;
         toast.textContent = message;
         document.body.appendChild(toast);
+
+        // Trigger animation
+        setTimeout(function() { toast.classList.add('show'); }, 10);
+
+        // Remove after delay
         setTimeout(function() {
-            toast.remove();
+            toast.classList.remove('show');
+            setTimeout(function() { toast.remove(); }, 300);
         }, 3000);
+    }
+
+    // ==========================================================================
+    // PHP Errors Clear Form
+    // ==========================================================================
+
+    function initPhpErrorsClearForm() {
+        var form = document.getElementById('php-errors-clear-form');
+        if (!form) return;
+
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Are you sure you want to clear the PHP errors log?')) {
+                e.preventDefault();
+            }
+        });
     }
 
     // ==========================================================================
@@ -337,12 +570,15 @@
     // ==========================================================================
 
     function init() {
+        initAutoResetToggles();
         initChannelManagement();
-        initLogManagement();
+        initAutoResetTimers();
+        initFileClearButtons();
+        initPerPageSelector();
         initContextModal();
-        initClearModal();
         initModalCloseHandlers();
         initTelegramConfig();
+        initPhpErrorsClearForm();
     }
 
     // Run on DOMContentLoaded or immediately if already loaded

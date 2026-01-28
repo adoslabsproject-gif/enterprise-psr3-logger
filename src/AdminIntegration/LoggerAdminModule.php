@@ -131,24 +131,23 @@ final class LoggerAdminModule implements AdminModuleInterface
         $controller = Controllers\LoggerController::class;
 
         return [
-            // Main Dashboard (channels config + logs viewer)
+            // Main Dashboard (channels config + log files list)
             ['method' => 'GET', 'path' => '/admin/logger', 'handler' => [$controller, 'index']],
+
+            // View specific log file
+            ['method' => 'GET', 'path' => '/admin/logger/view', 'handler' => [$controller, 'viewFile']],
 
             // Channel configuration (AJAX)
             ['method' => 'POST', 'path' => '/admin/logger/channel/update', 'handler' => [$controller, 'updateChannel']],
 
-            // Logs bulk actions
-            ['method' => 'POST', 'path' => '/admin/logger/logs/delete', 'handler' => [$controller, 'deleteLogs']],
-            ['method' => 'POST', 'path' => '/admin/logger/logs/clear', 'handler' => [$controller, 'clearLogs']],
+            // File actions
+            ['method' => 'POST', 'path' => '/admin/logger/file/clear', 'handler' => [$controller, 'clearFile']],
+            ['method' => 'GET', 'path' => '/admin/logger/file/download', 'handler' => [$controller, 'downloadFile']],
 
             // Telegram configuration page
             ['method' => 'GET', 'path' => '/admin/logger/telegram', 'handler' => [$controller, 'telegram']],
             ['method' => 'POST', 'path' => '/admin/logger/telegram/update', 'handler' => [$controller, 'updateTelegram']],
             ['method' => 'POST', 'path' => '/admin/logger/telegram/test', 'handler' => [$controller, 'testTelegram']],
-
-            // PHP errors
-            ['method' => 'GET', 'path' => '/admin/logger/php-errors', 'handler' => [$controller, 'phpErrors']],
-            ['method' => 'POST', 'path' => '/admin/logger/php-errors/clear', 'handler' => [$controller, 'clearPhpErrors']],
         ];
     }
 

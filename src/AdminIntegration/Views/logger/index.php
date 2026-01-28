@@ -1,30 +1,26 @@
 <?php
 /**
- * Logger Dashboard View
+ * Logger Dashboard View - FILE-BASED LOGGING
  *
- * CSP-compliant version - no inline styles or scripts
+ * Features:
+ * - Toggle per channel (enabled/disabled)
+ * - Level selector with explicit Save button
+ * - Auto-reset to WARNING after configurable hours when level < WARNING
+ * - Visual indicators for debug mode and time remaining
  *
- * @var array $channels Channel configurations with enabled/level
- * @var array $logs Database logs
- * @var int $total Total logs count
- * @var int $page Current page
- * @var int $per_page Items per page
- * @var int $pages Total pages
- * @var array $filters Current filters
- * @var array $available_channels Channels found in logs table
+ * @var array $channels Channel configurations with enabled/level/auto_reset_at
+ * @var array $log_files Available log files
+ * @var string $today Today's date
+ * @var string $logs_path Path to logs directory
  * @var array $levels Available log levels
  * @var string $page_title Page title
  * @var string $admin_base_path Admin base path
  * @var string $csrf_input CSRF hidden input
  * @var string $csrf_token CSRF token value
+ * @var int $auto_reset_hours Hours before auto-reset to WARNING (default: 2)
  */
-$getLevelBadgeClass = fn ($level) => match (strtolower($level)) {
-    'emergency', 'alert', 'critical', 'error' => 'eap-badge--danger',
-    'warning' => 'eap-badge--warning',
-    'notice', 'info' => 'eap-badge--info',
-    'debug' => 'eap-badge--secondary',
-    default => 'eap-badge--secondary'
-};
+
+$autoResetHours = $auto_reset_hours ?? 8;
 
 $icons = [
     'box' => '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
@@ -35,23 +31,63 @@ $icons = [
     'mail' => '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
     'layers' => '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     'zap' => '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    'alert-triangle' => '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    'send' => '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+    'clock' => '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+    'check' => '<polyline points="20 6 9 17 4 12"/>',
 ];
 
-$getIcon = fn ($icon) => $icons[$icon] ?? $icons['box'];
+$getIcon = fn($icon) => $icons[$icon] ?? $icons['box'];
+
+// Levels that trigger auto-reset (below WARNING)
+$debugLevels = ['debug', 'info', 'notice'];
 ?>
 
 <!-- Page Header -->
 <div class="eap-page-header">
-    <h1 class="eap-page-title">Logging Dashboard</h1>
-    <p class="eap-page-subtitle">Configure channels and monitor application logs</p>
+    <div class="eap-page-header__content">
+        <h1 class="eap-page-title">Logging Dashboard</h1>
+        <p class="eap-page-subtitle">Configure channels and browse log files</p>
+    </div>
+    <div class="eap-page-header__actions">
+        <a href="<?= htmlspecialchars($admin_base_path) ?>/logger/telegram" class="eap-btn eap-btn--secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <?= $getIcon('send') ?>
+            </svg>
+            Telegram Config
+        </a>
+    </div>
+</div>
+
+<!-- Auto-Reset Info Banner -->
+<div class="eap-logger-info-banner">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <?= $getIcon('clock') ?>
+    </svg>
+    <span>
+        Levels below <strong>WARNING</strong> (debug, info, notice) automatically reset to WARNING after
+        <strong><?= $autoResetHours ?> hour<?= $autoResetHours > 1 ? 's' : '' ?></strong> to prevent forgotten debug logging.
+    </span>
 </div>
 
 <!-- Channel Cards Grid -->
 <div class="eap-logger-channel-grid">
-    <?php foreach ($channels as $key => $channel): ?>
-    <div class="eap-logger-channel-card eap-logger-channel-card--<?= htmlspecialchars($channel['color'] ?? 'blue') ?> <?= !$channel['enabled'] ? 'eap-logger-channel-card--disabled' : '' ?>" data-channel="<?= htmlspecialchars($key) ?>">
+    <?php foreach ($channels as $key => $channel):
+        $isDebugLevel = in_array($channel['level'], $debugLevels);
+        $autoResetAt = $channel['auto_reset_at'] ?? null;
+        $hasAutoReset = $isDebugLevel && $autoResetAt;
+        $timeRemaining = $hasAutoReset ? max(0, strtotime($autoResetAt) - time()) : 0;
+        $hoursRemaining = floor($timeRemaining / 3600);
+        $minutesRemaining = floor(($timeRemaining % 3600) / 60);
+    ?>
+    <div class="eap-logger-channel-card eap-logger-channel-card--<?= htmlspecialchars($channel['color'] ?? 'blue') ?> <?= !$channel['enabled'] ? 'eap-logger-channel-card--disabled' : '' ?> <?= $isDebugLevel ? 'eap-logger-channel-card--debug-mode' : '' ?>"
+         data-channel="<?= htmlspecialchars($key) ?>"
+         data-original-level="<?= htmlspecialchars($channel['level']) ?>"
+         data-auto-reset-at="<?= htmlspecialchars($autoResetAt ?? '') ?>">
+
         <div class="eap-logger-channel-card__accent"></div>
 
+        <!-- Header with Toggle -->
         <div class="eap-logger-channel-card__header">
             <div class="eap-logger-channel-card__info">
                 <div class="eap-logger-channel-card__icon">
@@ -65,243 +101,189 @@ $getIcon = fn ($icon) => $icons[$icon] ?? $icons['box'];
                 </div>
             </div>
 
-            <label class="eap-logger-switch">
-                <input type="checkbox" class="eap-logger-switch__input channel-toggle" data-channel="<?= htmlspecialchars($key) ?>" <?= $channel['enabled'] ? 'checked' : '' ?>>
+            <!-- Channel Toggle (Enable/Disable) -->
+            <label class="eap-logger-switch" title="<?= $channel['enabled'] ? 'Channel enabled' : 'Channel disabled' ?>">
+                <input type="checkbox"
+                       class="eap-logger-switch__input channel-toggle"
+                       data-channel="<?= htmlspecialchars($key) ?>"
+                       <?= $channel['enabled'] ? 'checked' : '' ?>>
                 <span class="eap-logger-switch__slider"></span>
             </label>
         </div>
 
+        <!-- Description -->
         <p class="eap-logger-channel-card__desc"><?= htmlspecialchars($channel['description']) ?></p>
 
+        <!-- Auto-Reset Timer (shown when level < WARNING) -->
+        <?php if ($hasAutoReset && $timeRemaining > 0): ?>
+        <div class="eap-logger-channel-card__auto-reset" data-reset-timestamp="<?= strtotime($autoResetAt) ?>">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <?= $getIcon('clock') ?>
+            </svg>
+            <span class="auto-reset-text">
+                Auto-reset to WARNING in <strong class="auto-reset-time"><?= $hoursRemaining ?>h <?= $minutesRemaining ?>m</strong>
+            </span>
+        </div>
+        <?php endif; ?>
+
+        <!-- Level Selector -->
         <div class="eap-logger-channel-card__controls">
-            <select class="eap-logger-channel-card__level-select channel-level" data-channel="<?= htmlspecialchars($key) ?>">
-                <?php foreach ($levels as $level): ?>
-                <option value="<?= $level ?>" <?= $channel['level'] === $level ? 'selected' : '' ?>>
-                    <?= ucfirst($level) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
+            <div class="eap-logger-channel-card__level-row">
+                <label class="eap-logger-channel-card__level-label">Min Level:</label>
+                <select class="eap-logger-channel-card__level-select channel-level"
+                        data-channel="<?= htmlspecialchars($key) ?>"
+                        data-original="<?= htmlspecialchars($channel['level']) ?>">
+                    <?php foreach ($levels as $level): ?>
+                    <option value="<?= $level ?>" <?= $channel['level'] === $level ? 'selected' : '' ?>>
+                        <?= ucfirst($level) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <!-- Save Button (hidden by default, shown when level changes) -->
+                <button type="button"
+                        class="eap-btn eap-btn--primary eap-btn--sm channel-save-btn hidden"
+                        data-channel="<?= htmlspecialchars($key) ?>">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <?= $getIcon('check') ?>
+                    </svg>
+                    Save
+                </button>
+            </div>
+        </div>
+
+        <!-- Auto-Reset Toggle -->
+        <?php
+        $autoResetEnabled = $channel['auto_reset_enabled'] ?? true; // Default ON
+        ?>
+        <div class="eap-logger-channel-card__auto-reset-toggle">
+            <label class="eap-logger-auto-reset-switch">
+                <input type="checkbox"
+                       class="eap-logger-auto-reset-switch__input auto-reset-toggle"
+                       data-channel="<?= htmlspecialchars($key) ?>"
+                       <?= $autoResetEnabled ? 'checked' : '' ?>>
+                <span class="eap-logger-auto-reset-switch__slider"></span>
+                <span class="eap-logger-auto-reset-switch__label">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <?= $getIcon('clock') ?>
+                    </svg>
+                    Auto-reset to WARNING
+                </span>
+            </label>
+            <span class="eap-logger-channel-card__auto-reset-hint">
+                <?= $autoResetEnabled ? "After {$autoResetHours}h if level < WARNING" : 'Disabled - level stays until manually changed' ?>
+            </span>
+        </div>
+
+        <!-- Auto-Reset Countdown (shown when level < WARNING and auto-reset is enabled) -->
+        <?php if ($hasAutoReset && $timeRemaining > 0 && $autoResetEnabled): ?>
+        <div class="eap-logger-channel-card__auto-reset-countdown" data-reset-timestamp="<?= strtotime($autoResetAt) ?>">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <?= $getIcon('alert-triangle') ?>
+            </svg>
+            <span>Resets to WARNING in <strong class="auto-reset-time"><?= $hoursRemaining ?>h <?= $minutesRemaining ?>m</strong></span>
+        </div>
+        <?php endif; ?>
+
+        <!-- Usage Example -->
+        <div class="eap-logger-channel-card__usage">
+            <code>Logger::channel('<?= htmlspecialchars($key) ?>')->info('message');</code>
         </div>
     </div>
     <?php endforeach; ?>
 </div>
 
-<!-- Logs Section -->
-<div class="eap-card">
-    <div class="eap-logger-logs-header">
-        <h2 class="eap-logger-logs-title">
-            Database Logs
-            <span class="eap-badge eap-badge--secondary"><?= number_format($total) ?></span>
+<!-- Log Files Section -->
+<div class="eap-card eap-logger-files-section">
+    <div class="eap-card__header">
+        <h2 class="eap-card__title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            Log Files
         </h2>
-
-        <div class="eap-button-group">
-            <button type="button" class="eap-btn eap-btn--danger eap-btn--sm" id="delete-selected" disabled>
-                Delete Selected
-            </button>
-            <button type="button" class="eap-btn eap-btn--secondary eap-btn--sm" id="clear-old-logs">
-                Clear Old Logs
-            </button>
-        </div>
+        <span class="eap-badge eap-badge--secondary"><?= count($log_files) ?> files</span>
     </div>
 
-    <!-- Filters -->
-    <form method="GET" class="eap-logger-filters">
-        <div class="eap-form-group">
-            <label>Channel</label>
-            <select name="channel">
-                <option value="">All Channels</option>
-                <?php foreach ($available_channels as $ch): ?>
-                <option value="<?= htmlspecialchars($ch) ?>" <?= ($filters['channel'] ?? '') === $ch ? 'selected' : '' ?>>
-                    <?= htmlspecialchars($ch) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
+    <div class="eap-card__body">
+        <?php if (empty($log_files)): ?>
+        <div class="eap-logger-empty-state">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <p>No log files found</p>
+            <p class="eap-logger-empty-state__hint">Log files will appear here when your application starts logging</p>
         </div>
-
-        <div class="eap-form-group">
-            <label>Level</label>
-            <select name="level">
-                <option value="">All Levels</option>
-                <?php foreach ($levels as $level): ?>
-                <option value="<?= $level ?>" <?= ($filters['level'] ?? '') === $level ? 'selected' : '' ?>>
-                    <?= ucfirst($level) ?>
-                </option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-
-        <div class="eap-form-group">
-            <label>From</label>
-            <input type="date" name="from" value="<?= htmlspecialchars($filters['from'] ?? '') ?>">
-        </div>
-
-        <div class="eap-form-group">
-            <label>To</label>
-            <input type="date" name="to" value="<?= htmlspecialchars($filters['to'] ?? '') ?>">
-        </div>
-
-        <div class="eap-form-group eap-form-group--search">
-            <label>Search</label>
-            <input type="text" name="search" placeholder="Search in message..." value="<?= htmlspecialchars($filters['search'] ?? '') ?>">
-        </div>
-
-        <div class="eap-form-group eap-logger-filter-buttons">
-            <button type="submit" class="eap-btn eap-btn--primary eap-btn--sm">Filter</button>
-            <a href="<?= htmlspecialchars($admin_base_path) ?>/logger" class="eap-btn eap-btn--ghost eap-btn--sm">Reset</a>
-        </div>
-    </form>
-
-    <!-- Logs Table -->
-    <div class="eap-table-container">
-        <table class="eap-logger-table">
-            <thead>
-                <tr>
-                    <th class="eap-logger-table__col--checkbox">
-                        <input type="checkbox" id="select-all">
-                    </th>
-                    <th class="eap-logger-table__col--time">Time</th>
-                    <th class="eap-logger-table__col--channel">Channel</th>
-                    <th class="eap-logger-table__col--level">Level</th>
-                    <th>Message</th>
-                    <th class="eap-logger-table__col--actions"></th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (empty($logs)): ?>
-                <tr>
-                    <td colspan="6">
-                        <div class="eap-logger-empty-state">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14 2 14 8 20 8"/>
+        <?php else: ?>
+        <div class="eap-logger-files-grid">
+            <?php foreach ($log_files as $file): ?>
+            <?php
+            $isToday = $file['date'] === $today;
+            $channelColor = $file['color'] ?? 'gray';
+            ?>
+            <div class="eap-logger-file-card eap-logger-file-card--<?= $channelColor ?> <?= $isToday ? 'eap-logger-file-card--today' : '' ?>">
+                <a href="<?= htmlspecialchars($admin_base_path) ?>/logger/view?file=<?= urlencode($file['name']) ?>" class="eap-logger-file-card__link">
+                    <div class="eap-logger-file-card__header">
+                        <div class="eap-logger-file-card__icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <?= $getIcon($channels[$file['channel']]['icon'] ?? 'box') ?>
                             </svg>
-                            <p>No logs found</p>
-                            <?php if (!empty(array_filter($filters))): ?>
-                            <p class="eap-logger-empty-state__hint">Try adjusting your filters</p>
+                        </div>
+                        <div class="eap-logger-file-card__info">
+                            <span class="eap-logger-file-card__channel"><?= htmlspecialchars(ucfirst($file['channel'])) ?></span>
+                            <?php if ($file['date']): ?>
+                            <span class="eap-logger-file-card__date"><?= htmlspecialchars($file['date']) ?></span>
                             <?php endif; ?>
                         </div>
-                    </td>
-                </tr>
-                <?php else: ?>
-                <?php foreach ($logs as $log): ?>
-                <tr data-id="<?= $log['id'] ?>">
-                    <td>
-                        <input type="checkbox" class="log-select" value="<?= $log['id'] ?>">
-                    </td>
-                    <td class="eap-logger-log-time">
-                        <?= date('Y-m-d H:i:s', strtotime($log['created_at'])) ?>
-                    </td>
-                    <td>
-                        <span class="eap-badge eap-badge--outline"><?= htmlspecialchars($log['channel']) ?></span>
-                    </td>
-                    <td>
-                        <span class="eap-badge <?= $getLevelBadgeClass($log['level']) ?>">
-                            <?= strtoupper($log['level']) ?>
-                        </span>
-                    </td>
-                    <td class="eap-logger-log-message">
-                        <?= htmlspecialchars($log['message']) ?>
-                        <?php if (!empty($log['context']) && is_array($log['context']) && count($log['context']) > 0): ?>
-                        <button type="button" class="eap-logger-context-btn" data-context="<?= htmlspecialchars(json_encode($log['context'], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) ?>">
-                            + context
-                        </button>
+                        <?php if ($isToday): ?>
+                        <span class="eap-badge eap-badge--success eap-logger-file-card__today-badge">Today</span>
                         <?php endif; ?>
-                    </td>
-                    <td>
-                        <button type="button" class="eap-btn eap-btn--ghost eap-btn--xs delete-log" data-id="<?= $log['id'] ?>">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="3 6 5 6 21 6"/>
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                            </svg>
-                        </button>
-                    </td>
-                </tr>
-                <?php endforeach; ?>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
+                    </div>
 
-    <!-- Pagination -->
-    <?php if ($pages > 1): ?>
-    <div class="eap-logger-pagination">
-        <div class="eap-logger-pagination__info">
-            Showing <?= number_format(($page - 1) * $per_page + 1) ?> - <?= number_format(min($page * $per_page, $total)) ?> of <?= number_format($total) ?>
-        </div>
-        <div class="eap-logger-pagination__links">
-            <?php if ($page > 1): ?>
-            <a href="?<?= http_build_query(array_merge($filters, ['page' => $page - 1])) ?>" class="eap-logger-pagination__link">Prev</a>
-            <?php endif; ?>
+                    <div class="eap-logger-file-card__name">
+                        <?= htmlspecialchars($file['name']) ?>
+                    </div>
 
-            <?php
-            $start = max(1, $page - 2);
-        $end = min($pages, $page + 2);
-        for ($i = $start; $i <= $end; $i++): ?>
-            <a href="?<?= http_build_query(array_merge($filters, ['page' => $i])) ?>"
-               class="eap-logger-pagination__link <?= $i === $page ? 'eap-logger-pagination__link--active' : '' ?>">
-                <?= $i ?>
-            </a>
-            <?php endfor; ?>
+                    <div class="eap-logger-file-card__meta">
+                        <span class="eap-logger-file-card__size"><?= htmlspecialchars($file['size_human']) ?></span>
+                        <span class="eap-logger-file-card__modified">Modified: <?= htmlspecialchars($file['modified_human']) ?></span>
+                    </div>
+                </a>
 
-            <?php if ($page < $pages): ?>
-            <a href="?<?= http_build_query(array_merge($filters, ['page' => $page + 1])) ?>" class="eap-logger-pagination__link">Next</a>
-            <?php endif; ?>
+                <div class="eap-logger-file-card__actions">
+                    <a href="<?= htmlspecialchars($admin_base_path) ?>/logger/file/download?file=<?= urlencode($file['name']) ?>"
+                       class="eap-btn eap-btn--ghost eap-btn--xs" title="Download">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                    </a>
+                    <button type="button" class="eap-btn eap-btn--ghost eap-btn--xs clear-file-btn" data-file="<?= htmlspecialchars($file['name']) ?>" title="Clear">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"/>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <?php endforeach; ?>
         </div>
-    </div>
-    <?php endif; ?>
-</div>
-
-<!-- Context Modal -->
-<div id="context-modal" class="eap-logger-modal-overlay hidden">
-    <div class="eap-logger-modal">
-        <div class="eap-logger-modal__header">
-            <h3 class="eap-logger-modal__title">Log Context</h3>
-            <button type="button" class="eap-logger-modal__close">&times;</button>
-        </div>
-        <div class="eap-logger-modal__body">
-            <pre id="context-content"></pre>
-        </div>
+        <?php endif; ?>
     </div>
 </div>
 
-<!-- Clear Logs Modal -->
-<div id="clear-modal" class="eap-logger-modal-overlay hidden">
-    <div class="eap-logger-modal">
-        <div class="eap-logger-modal__header">
-            <h3 class="eap-logger-modal__title">Clear Old Logs</h3>
-            <button type="button" class="eap-logger-modal__close">&times;</button>
-        </div>
-        <form id="clear-form" method="POST" action="<?= htmlspecialchars($admin_base_path) ?>/logger/logs/clear">
-            <?= $csrf_input ?>
-            <div class="eap-logger-modal__body">
-                <div class="eap-form-group">
-                    <label class="eap-label">Delete logs older than:</label>
-                    <select name="older_than" class="eap-select">
-                        <option value="1 day">1 day</option>
-                        <option value="3 days">3 days</option>
-                        <option value="7 days" selected>7 days</option>
-                        <option value="14 days">14 days</option>
-                        <option value="30 days">30 days</option>
-                    </select>
-                </div>
-                <div class="eap-form-group">
-                    <label class="eap-label">Channel (optional):</label>
-                    <select name="channel" class="eap-select">
-                        <option value="">All Channels</option>
-                        <?php foreach ($available_channels as $ch): ?>
-                        <option value="<?= htmlspecialchars($ch) ?>"><?= htmlspecialchars($ch) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-            </div>
-            <div class="eap-logger-modal__footer">
-                <button type="button" class="eap-btn eap-btn--ghost modal-close">Cancel</button>
-                <button type="submit" class="eap-btn eap-btn--danger">Clear Logs</button>
-            </div>
-        </form>
-    </div>
+<!-- Logs Path Info -->
+<div class="eap-logger-path-info">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </svg>
+    <span>Logs directory: <code><?= htmlspecialchars($logs_path) ?></code></span>
 </div>
 
 <!-- Hidden data for JavaScript -->
 <input type="hidden" id="logger-admin-base-path" value="<?= htmlspecialchars($admin_base_path) ?>">
 <input type="hidden" id="logger-csrf-token" value="<?= htmlspecialchars($csrf_token ?? '') ?>">
+<input type="hidden" id="logger-auto-reset-hours" value="<?= $autoResetHours ?>">

@@ -4,6 +4,7 @@
  * CSP-compliant - no inline styles needed
  * All selectors prefixed with .eap-logger- to avoid conflicts
  * Uses BEM naming convention
+ * Compatible with EAP dark theme
  */
 
 /* ==========================================================================
@@ -42,8 +43,8 @@
    ========================================================================== */
 
 .eap-logger-channel-card {
-    background: var(--eap-card-bg, #fff);
-    border: 1px solid var(--eap-border-color, #e5e7eb);
+    background: var(--eap-surface, #21262d);
+    border: 1px solid var(--eap-border, #3d444d);
     border-radius: 12px;
     padding: 20px;
     transition: box-shadow 0.2s, border-color 0.2s;
@@ -52,11 +53,12 @@
 }
 
 .eap-logger-channel-card:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--eap-glow-cyan, 0 0 20px rgba(0, 212, 255, 0.1));
+    border-color: var(--eap-border-light, #484f58);
 }
 
 .eap-logger-channel-card--disabled {
-    opacity: 0.6;
+    opacity: 0.5;
 }
 
 /* Accent colors for each channel type */
@@ -68,16 +70,16 @@
     height: 4px;
 }
 
-.eap-logger-channel-card--blue .eap-logger-channel-card__accent { background-color: #3b82f6; }
-.eap-logger-channel-card--purple .eap-logger-channel-card__accent { background-color: #8b5cf6; }
-.eap-logger-channel-card--cyan .eap-logger-channel-card__accent { background-color: #06b6d4; }
-.eap-logger-channel-card--orange .eap-logger-channel-card__accent { background-color: #f97316; }
-.eap-logger-channel-card--green .eap-logger-channel-card__accent { background-color: #22c55e; }
-.eap-logger-channel-card--pink .eap-logger-channel-card__accent { background-color: #ec4899; }
-.eap-logger-channel-card--indigo .eap-logger-channel-card__accent { background-color: #6366f1; }
-.eap-logger-channel-card--yellow .eap-logger-channel-card__accent { background-color: #eab308; }
-.eap-logger-channel-card--red .eap-logger-channel-card__accent { background-color: #ef4444; }
-.eap-logger-channel-card--gray .eap-logger-channel-card__accent { background-color: #6b7280; }
+.eap-logger-channel-card--blue .eap-logger-channel-card__accent { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.eap-logger-channel-card--purple .eap-logger-channel-card__accent { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.eap-logger-channel-card--cyan .eap-logger-channel-card__accent { background: linear-gradient(90deg, #00d4ff, #67e8f9); }
+.eap-logger-channel-card--orange .eap-logger-channel-card__accent { background: linear-gradient(90deg, #f97316, #fb923c); }
+.eap-logger-channel-card--green .eap-logger-channel-card__accent { background: linear-gradient(90deg, #00ff88, #4ade80); }
+.eap-logger-channel-card--pink .eap-logger-channel-card__accent { background: linear-gradient(90deg, #ec4899, #f472b6); }
+.eap-logger-channel-card--indigo .eap-logger-channel-card__accent { background: linear-gradient(90deg, #6366f1, #818cf8); }
+.eap-logger-channel-card--yellow .eap-logger-channel-card__accent { background: linear-gradient(90deg, #eab308, #facc15); }
+.eap-logger-channel-card--red .eap-logger-channel-card__accent { background: linear-gradient(90deg, #ff5555, #f87171); }
+.eap-logger-channel-card--gray .eap-logger-channel-card__accent { background: linear-gradient(90deg, #6b7280, #9ca3af); }
 
 .eap-logger-channel-card__header {
     display: flex;
@@ -103,16 +105,16 @@
     flex-shrink: 0;
 }
 
-.eap-logger-channel-card--blue .eap-logger-channel-card__icon { background-color: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-.eap-logger-channel-card--purple .eap-logger-channel-card__icon { background-color: rgba(139, 92, 246, 0.1); color: #8b5cf6; }
-.eap-logger-channel-card--cyan .eap-logger-channel-card__icon { background-color: rgba(6, 182, 212, 0.1); color: #06b6d4; }
-.eap-logger-channel-card--orange .eap-logger-channel-card__icon { background-color: rgba(249, 115, 22, 0.1); color: #f97316; }
-.eap-logger-channel-card--green .eap-logger-channel-card__icon { background-color: rgba(34, 197, 94, 0.1); color: #22c55e; }
-.eap-logger-channel-card--pink .eap-logger-channel-card__icon { background-color: rgba(236, 72, 153, 0.1); color: #ec4899; }
-.eap-logger-channel-card--indigo .eap-logger-channel-card__icon { background-color: rgba(99, 102, 241, 0.1); color: #6366f1; }
-.eap-logger-channel-card--yellow .eap-logger-channel-card__icon { background-color: rgba(234, 179, 8, 0.1); color: #eab308; }
-.eap-logger-channel-card--red .eap-logger-channel-card__icon { background-color: rgba(239, 68, 68, 0.1); color: #ef4444; }
-.eap-logger-channel-card--gray .eap-logger-channel-card__icon { background-color: rgba(107, 114, 128, 0.1); color: #6b7280; }
+.eap-logger-channel-card--blue .eap-logger-channel-card__icon { background-color: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.eap-logger-channel-card--purple .eap-logger-channel-card__icon { background-color: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+.eap-logger-channel-card--cyan .eap-logger-channel-card__icon { background-color: rgba(0, 212, 255, 0.15); color: #00d4ff; }
+.eap-logger-channel-card--orange .eap-logger-channel-card__icon { background-color: rgba(249, 115, 22, 0.15); color: #fb923c; }
+.eap-logger-channel-card--green .eap-logger-channel-card__icon { background-color: rgba(0, 255, 136, 0.15); color: #00ff88; }
+.eap-logger-channel-card--pink .eap-logger-channel-card__icon { background-color: rgba(236, 72, 153, 0.15); color: #f472b6; }
+.eap-logger-channel-card--indigo .eap-logger-channel-card__icon { background-color: rgba(99, 102, 241, 0.15); color: #818cf8; }
+.eap-logger-channel-card--yellow .eap-logger-channel-card__icon { background-color: rgba(234, 179, 8, 0.15); color: #facc15; }
+.eap-logger-channel-card--red .eap-logger-channel-card__icon { background-color: rgba(255, 85, 85, 0.15); color: #ff5555; }
+.eap-logger-channel-card--gray .eap-logger-channel-card__icon { background-color: rgba(107, 114, 128, 0.15); color: #9ca3af; }
 
 .eap-logger-channel-card__icon svg {
     width: 20px;
@@ -122,44 +124,218 @@
 .eap-logger-channel-card__name {
     font-size: 15px;
     font-weight: 600;
-    color: var(--eap-text-primary, #111827);
+    color: var(--eap-text-primary, #e6edf3);
     margin: 0 0 2px 0;
 }
 
 .eap-logger-channel-card__key {
     font-size: 12px;
-    color: var(--eap-text-muted, #6b7280);
-    font-family: monospace;
+    color: var(--eap-text-muted, #6e7681);
+    font-family: var(--eap-font-mono, monospace);
 }
 
 .eap-logger-channel-card__desc {
     font-size: 13px;
-    color: var(--eap-text-secondary, #4b5563);
-    margin: 0 0 16px 0;
+    color: var(--eap-text-secondary, #8b949e);
+    margin: 0 0 12px 0;
     line-height: 1.5;
+}
+
+.eap-logger-channel-card__usage {
+    background: var(--eap-abyss, #161b22);
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 16px;
+    overflow-x: auto;
+}
+
+.eap-logger-channel-card__usage code {
+    font-family: var(--eap-font-mono, 'JetBrains Mono', monospace);
+    font-size: 11px;
+    color: var(--eap-neon-cyan, #00d4ff);
+    white-space: nowrap;
 }
 
 .eap-logger-channel-card__controls {
     display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.eap-logger-channel-card__level-row {
+    display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+}
+
+.eap-logger-channel-card__level-label {
+    font-size: 12px;
+    color: var(--eap-text-muted, #6e7681);
+    white-space: nowrap;
 }
 
 .eap-logger-channel-card__level-select {
     flex: 1;
     padding: 8px 12px;
-    border: 1px solid var(--eap-border-color, #e5e7eb);
+    border: 1px solid var(--eap-border, #3d444d);
     border-radius: 8px;
     font-size: 13px;
-    background: var(--eap-input-bg, #fff);
-    color: var(--eap-text-primary, #111827);
+    background: var(--eap-abyss, #161b22);
+    color: var(--eap-text-primary, #e6edf3);
     cursor: pointer;
+    min-width: 100px;
 }
 
 .eap-logger-channel-card__level-select:focus {
     outline: none;
-    border-color: var(--eap-primary, #3b82f6);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: var(--eap-neon-cyan, #00d4ff);
+    box-shadow: var(--eap-glow-cyan, 0 0 20px rgba(0, 212, 255, 0.3));
+}
+
+/* Save Button */
+.channel-save-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    white-space: nowrap;
+}
+
+.channel-save-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Pulse animation for save button */
+.eap-btn--pulse {
+    animation: pulse-glow 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(0, 212, 255, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 20px 4px rgba(0, 212, 255, 0.3);
+    }
+}
+
+/* Debug Warning Message */
+.eap-logger-channel-card__debug-warning {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--eap-neon-orange, #f97316);
+    padding: 4px 0;
+}
+
+.eap-logger-channel-card__debug-warning svg {
+    flex-shrink: 0;
+}
+
+/* Auto-Reset Timer */
+.eap-logger-channel-card__auto-reset {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: rgba(249, 115, 22, 0.1);
+    border: 1px solid rgba(249, 115, 22, 0.3);
+    border-radius: 6px;
+    margin: 12px 0;
+    font-size: 12px;
+    color: var(--eap-neon-orange, #f97316);
+}
+
+.eap-logger-channel-card__auto-reset svg {
+    flex-shrink: 0;
+    animation: spin 4s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.eap-logger-channel-card__auto-reset .auto-reset-time {
+    color: #fb923c;
+}
+
+/* Debug Mode Card State */
+.eap-logger-channel-card--debug-mode {
+    border-color: rgba(249, 115, 22, 0.4);
+}
+
+.eap-logger-channel-card--debug-mode:hover {
+    box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
+}
+
+/* ==========================================================================
+   Info Banner
+   ========================================================================== */
+
+.eap-logger-info-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--eap-surface, #21262d);
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 8px;
+    margin-bottom: 24px;
+    font-size: 13px;
+    color: var(--eap-text-secondary, #8b949e);
+}
+
+.eap-logger-info-banner svg {
+    flex-shrink: 0;
+    color: var(--eap-neon-cyan, #00d4ff);
+}
+
+.eap-logger-info-banner strong {
+    color: var(--eap-text-primary, #e6edf3);
+}
+
+/* ==========================================================================
+   Spinner
+   ========================================================================== */
+
+.eap-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* ==========================================================================
+   PHP Errors Page
+   ========================================================================== */
+
+.eap-logger-php-errors-badges {
+    display: flex;
+    gap: 8px;
+}
+
+.eap-logger-php-errors-content {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 16px;
+    border-radius: 8px;
+    overflow: auto;
+    max-height: 600px;
+    font-family: var(--eap-font-mono, 'JetBrains Mono', monospace);
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+
+.eap-logger-php-errors-form {
+    margin-top: 16px;
 }
 
 /* ==========================================================================
@@ -188,7 +364,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background-color: #d1d5db;
+    background-color: var(--eap-border, #3d444d);
     transition: 0.3s;
     border-radius: 24px;
 }
@@ -200,18 +376,120 @@
     width: 18px;
     left: 3px;
     bottom: 3px;
-    background-color: white;
+    background-color: var(--eap-text-secondary, #8b949e);
     transition: 0.3s;
     border-radius: 50%;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .eap-logger-switch__input:checked + .eap-logger-switch__slider {
-    background-color: #22c55e;
+    background-color: var(--eap-neon-green, #00ff88);
 }
 
 .eap-logger-switch__input:checked + .eap-logger-switch__slider::before {
     transform: translateX(20px);
+    background-color: var(--eap-void, #0d1117);
+}
+
+/* ==========================================================================
+   Auto-Reset Toggle
+   ========================================================================== */
+
+.eap-logger-channel-card__auto-reset-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--eap-void, #0d1117);
+    border-radius: 8px;
+    border: 1px solid var(--eap-border, #3d444d);
+}
+
+.eap-logger-auto-reset-switch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+}
+
+.eap-logger-auto-reset-switch__input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.eap-logger-auto-reset-switch__slider {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background-color: var(--eap-border, #3d444d);
+    transition: 0.3s;
+    border-radius: 20px;
+    flex-shrink: 0;
+}
+
+.eap-logger-auto-reset-switch__slider::before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--eap-text-secondary, #8b949e);
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.eap-logger-auto-reset-switch__input:checked + .eap-logger-auto-reset-switch__slider {
+    background: var(--eap-neon-cyan, #00d4ff);
+}
+
+.eap-logger-auto-reset-switch__input:checked + .eap-logger-auto-reset-switch__slider::before {
+    transform: translateX(16px);
+    background-color: var(--eap-void, #0d1117);
+}
+
+.eap-logger-auto-reset-switch__label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--eap-text-secondary, #8b949e);
+}
+
+.eap-logger-auto-reset-switch__input:checked ~ .eap-logger-auto-reset-switch__label {
+    color: var(--eap-neon-cyan, #00d4ff);
+}
+
+.eap-logger-channel-card__auto-reset-hint {
+    font-size: 11px;
+    color: var(--eap-text-muted, #6b7280);
+    max-width: 150px;
+    text-align: right;
+}
+
+/* Auto-Reset Countdown */
+.eap-logger-channel-card__auto-reset-countdown {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.1), transparent);
+    border-left: 3px solid #f59e0b;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #fbbf24;
+}
+
+.eap-logger-channel-card__auto-reset-countdown svg {
+    flex-shrink: 0;
+}
+
+.eap-logger-channel-card__auto-reset-countdown .auto-reset-time {
+    font-weight: 600;
 }
 
 /* ==========================================================================
@@ -230,6 +508,7 @@
 .eap-logger-logs-title {
     font-size: 18px;
     font-weight: 600;
+    color: var(--eap-text-primary, #e6edf3);
     margin: 0;
     display: flex;
     align-items: center;
@@ -245,7 +524,7 @@
     flex-wrap: wrap;
     gap: 12px;
     padding: 16px;
-    background: var(--eap-bg-secondary, #f9fafb);
+    background: var(--eap-elevated, #30363d);
     border-radius: 8px;
     margin: 0 16px 16px 16px;
 }
@@ -264,7 +543,7 @@
     display: block;
     font-size: 11px;
     font-weight: 500;
-    color: var(--eap-text-muted, #6b7280);
+    color: var(--eap-text-muted, #6e7681);
     margin-bottom: 4px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -274,10 +553,17 @@
 .eap-logger-filters .eap-form-group input {
     width: 100%;
     padding: 8px 12px;
-    border: 1px solid var(--eap-border-color, #e5e7eb);
+    border: 1px solid var(--eap-border, #3d444d);
     border-radius: 6px;
     font-size: 13px;
-    background: var(--eap-input-bg, #fff);
+    background: var(--eap-abyss, #161b22);
+    color: var(--eap-text-primary, #e6edf3);
+}
+
+.eap-logger-filters .eap-form-group select:focus,
+.eap-logger-filters .eap-form-group input:focus {
+    outline: none;
+    border-color: var(--eap-neon-cyan, #00d4ff);
 }
 
 .eap-logger-filter-buttons {
@@ -302,20 +588,21 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: var(--eap-text-muted, #6b7280);
-    background: var(--eap-bg-secondary, #f9fafb);
-    border-bottom: 1px solid var(--eap-border-color, #e5e7eb);
+    color: var(--eap-text-muted, #6e7681);
+    background: var(--eap-elevated, #30363d);
+    border-bottom: 1px solid var(--eap-border, #3d444d);
 }
 
 .eap-logger-table td {
     padding: 12px 16px;
-    border-bottom: 1px solid var(--eap-border-color, #e5e7eb);
+    border-bottom: 1px solid var(--eap-border, #3d444d);
     font-size: 13px;
     vertical-align: top;
+    color: var(--eap-text-primary, #e6edf3);
 }
 
 .eap-logger-table tbody tr:hover {
-    background: var(--eap-bg-hover, #f9fafb);
+    background: var(--eap-elevated, #30363d);
 }
 
 .eap-logger-table__col--checkbox { width: 40px; }
@@ -325,9 +612,9 @@
 .eap-logger-table__col--actions { width: 60px; }
 
 .eap-logger-log-time {
-    font-family: monospace;
+    font-family: var(--eap-font-mono, monospace);
     font-size: 12px;
-    color: var(--eap-text-muted, #6b7280);
+    color: var(--eap-text-muted, #6e7681);
     white-space: nowrap;
 }
 
@@ -338,17 +625,184 @@
 
 .eap-logger-context-btn {
     font-size: 11px;
-    color: var(--eap-primary, #3b82f6);
-    background: none;
-    border: none;
+    color: var(--eap-neon-cyan, #00d4ff);
+    background: rgba(0, 212, 255, 0.1);
+    border: 1px solid rgba(0, 212, 255, 0.3);
+    border-radius: 4px;
     cursor: pointer;
-    padding: 2px 6px;
-    margin-top: 4px;
+    padding: 4px 8px;
+    margin-top: 8px;
     display: inline-block;
+    transition: all 0.15s;
 }
 
 .eap-logger-context-btn:hover {
-    text-decoration: underline;
+    background: rgba(0, 212, 255, 0.2);
+    border-color: var(--eap-neon-cyan, #00d4ff);
+}
+
+/* ==========================================================================
+   Log Entries (Human-readable format)
+   ========================================================================== */
+
+/* ==========================================================================
+   Log Entries (Human-readable format with clear separation)
+   ========================================================================== */
+
+.eap-logger-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+}
+
+.eap-logger-entry {
+    background: var(--eap-surface, #21262d);
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}
+
+.eap-logger-entry:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Level-based styling */
+.eap-logger-entry--danger {
+    border-left: 4px solid var(--eap-neon-red, #ff5555);
+}
+
+.eap-logger-entry--danger .eap-logger-entry__header {
+    background: rgba(255, 85, 85, 0.1);
+}
+
+.eap-logger-entry--warning {
+    border-left: 4px solid var(--eap-neon-orange, #ffb86c);
+}
+
+.eap-logger-entry--warning .eap-logger-entry__header {
+    background: rgba(255, 184, 108, 0.1);
+}
+
+.eap-logger-entry--info {
+    border-left: 4px solid var(--eap-neon-cyan, #00d4ff);
+}
+
+.eap-logger-entry--info .eap-logger-entry__header {
+    background: rgba(0, 212, 255, 0.05);
+}
+
+.eap-logger-entry--secondary {
+    border-left: 4px solid var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-entry--secondary .eap-logger-entry__header {
+    background: rgba(110, 118, 129, 0.1);
+}
+
+/* Entry Header */
+.eap-logger-entry__header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--eap-border, #3d444d);
+    flex-wrap: wrap;
+}
+
+.eap-logger-entry__number {
+    font-family: var(--eap-font-mono, monospace);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--eap-text-muted, #6e7681);
+    background: var(--eap-abyss, #161b22);
+    padding: 4px 10px;
+    border-radius: 12px;
+    min-width: 45px;
+    text-align: center;
+}
+
+.eap-logger-entry__time {
+    font-family: var(--eap-font-mono, monospace);
+    font-size: 13px;
+    color: var(--eap-text-secondary, #8b949e);
+    background: var(--eap-abyss, #161b22);
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
+.eap-logger-entry__channel {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--eap-neon-purple, #bd93f9);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: rgba(189, 147, 249, 0.15);
+    padding: 4px 10px;
+    border-radius: 6px;
+}
+
+.eap-logger-entry__level {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 6px;
+}
+
+/* Entry Body */
+.eap-logger-entry__body {
+    padding: 16px;
+}
+
+.eap-logger-entry__message {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--eap-text-primary, #e6edf3);
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+
+/* Details Section */
+.eap-logger-entry__details {
+    background: var(--eap-abyss, #161b22);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: var(--eap-font-mono, 'JetBrains Mono', monospace);
+    font-size: 13px;
+    line-height: 1.8;
+    border: 1px solid var(--eap-border, #3d444d);
+}
+
+.eap-logger-entry__detail-line {
+    color: var(--eap-text-secondary, #8b949e);
+    padding: 4px 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.eap-logger-entry__detail-line::before {
+    content: '\2022';
+    color: var(--eap-neon-cyan, #00d4ff);
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+/* Stack trace styling */
+.eap-logger-entry__detail-line--stack {
+    color: var(--eap-neon-orange, #ffb86c);
+    font-size: 12px;
+    padding-left: 20px;
+}
+
+.eap-logger-entry__detail-line--stack::before {
+    content: '\21B3';
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-entry__context {
+    margin-top: 12px;
 }
 
 /* ==========================================================================
@@ -358,7 +812,7 @@
 .eap-logger-empty-state {
     text-align: center;
     padding: 48px 24px;
-    color: var(--eap-text-muted, #6b7280);
+    color: var(--eap-text-muted, #6e7681);
 }
 
 .eap-logger-empty-state svg {
@@ -366,6 +820,7 @@
     height: 48px;
     margin-bottom: 16px;
     opacity: 0.5;
+    color: var(--eap-text-muted, #6e7681);
 }
 
 .eap-logger-empty-state__hint {
@@ -382,12 +837,12 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px;
-    border-top: 1px solid var(--eap-border-color, #e5e7eb);
+    border-top: 1px solid var(--eap-border, #3d444d);
 }
 
 .eap-logger-pagination__info {
     font-size: 13px;
-    color: var(--eap-text-muted, #6b7280);
+    color: var(--eap-text-muted, #6e7681);
 }
 
 .eap-logger-pagination__links {
@@ -397,22 +852,23 @@
 
 .eap-logger-pagination__link {
     padding: 6px 12px;
-    border: 1px solid var(--eap-border-color, #e5e7eb);
+    border: 1px solid var(--eap-border, #3d444d);
     border-radius: 6px;
     font-size: 13px;
     text-decoration: none;
-    color: var(--eap-text-primary, #111827);
-    background: var(--eap-card-bg, #fff);
+    color: var(--eap-text-primary, #e6edf3);
+    background: var(--eap-surface, #21262d);
 }
 
 .eap-logger-pagination__link:hover {
-    background: var(--eap-bg-secondary, #f9fafb);
+    background: var(--eap-elevated, #30363d);
+    border-color: var(--eap-border-light, #484f58);
 }
 
 .eap-logger-pagination__link--active {
-    background: var(--eap-primary, #3b82f6);
-    color: white;
-    border-color: var(--eap-primary, #3b82f6);
+    background: var(--eap-neon-cyan, #00d4ff);
+    color: var(--eap-void, #0d1117);
+    border-color: var(--eap-neon-cyan, #00d4ff);
 }
 
 /* ==========================================================================
@@ -425,11 +881,12 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.7);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
+    backdrop-filter: blur(4px);
 }
 
 .eap-logger-modal-overlay.hidden {
@@ -437,7 +894,8 @@
 }
 
 .eap-logger-modal {
-    background: var(--eap-card-bg, #fff);
+    background: var(--eap-surface, #21262d);
+    border: 1px solid var(--eap-border, #3d444d);
     border-radius: 12px;
     max-width: 500px;
     width: 90%;
@@ -447,7 +905,7 @@
 
 .eap-logger-modal__header {
     padding: 16px 20px;
-    border-bottom: 1px solid var(--eap-border-color, #e5e7eb);
+    border-bottom: 1px solid var(--eap-border, #3d444d);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -456,6 +914,7 @@
 .eap-logger-modal__title {
     font-size: 16px;
     font-weight: 600;
+    color: var(--eap-text-primary, #e6edf3);
     margin: 0;
 }
 
@@ -464,8 +923,12 @@
     border: none;
     font-size: 24px;
     cursor: pointer;
-    color: var(--eap-text-muted, #6b7280);
+    color: var(--eap-text-muted, #6e7681);
     line-height: 1;
+}
+
+.eap-logger-modal__close:hover {
+    color: var(--eap-text-primary, #e6edf3);
 }
 
 .eap-logger-modal__body {
@@ -473,17 +936,20 @@
 }
 
 .eap-logger-modal__body pre {
-    background: var(--eap-bg-secondary, #f1f5f9);
+    background: var(--eap-abyss, #161b22);
+    border: 1px solid var(--eap-border, #3d444d);
     padding: 16px;
     border-radius: 8px;
     overflow: auto;
     font-size: 12px;
+    font-family: var(--eap-font-mono, monospace);
+    color: var(--eap-text-code, #c9d1d9);
     margin: 0;
 }
 
 .eap-logger-modal__footer {
     padding: 16px 20px;
-    border-top: 1px solid var(--eap-border-color, #e5e7eb);
+    border-top: 1px solid var(--eap-border, #3d444d);
     display: flex;
     justify-content: flex-end;
     gap: 8px;
@@ -499,18 +965,19 @@
     right: 20px;
     padding: 12px 20px;
     border-radius: 8px;
-    color: white;
+    color: var(--eap-void, #0d1117);
     font-size: 14px;
+    font-weight: 500;
     z-index: 9999;
     animation: eap-logger-slideIn 0.3s ease;
 }
 
 .eap-logger-toast--success {
-    background: #22c55e;
+    background: var(--eap-neon-green, #00ff88);
 }
 
 .eap-logger-toast--error {
-    background: #ef4444;
+    background: var(--eap-neon-red, #ff5555);
 }
 
 @keyframes eap-logger-slideIn {
@@ -525,307 +992,413 @@
 }
 
 /* ==========================================================================
-   Telegram Page
+   Badges (for log levels)
    ========================================================================== */
 
-.eap-logger-telegram-page {
-    max-width: 900px;
-}
-
-.eap-logger-telegram-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-}
-
-@media (max-width: 900px) {
-    .eap-logger-telegram-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.eap-logger-form-section {
-    margin-bottom: 24px;
-}
-
-.eap-logger-form-section__title {
-    font-size: 14px;
+.eap-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--eap-text-primary, #111827);
-    margin: 0 0 16px 0;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--eap-border-color, #e5e7eb);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
-.eap-logger-form-group {
-    margin-bottom: 16px;
+.eap-badge--danger {
+    background: var(--eap-danger-bg, rgba(255, 85, 85, 0.1));
+    color: var(--eap-neon-red, #ff5555);
 }
 
-.eap-logger-form-label {
-    display: block;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--eap-text-primary, #111827);
-    margin-bottom: 6px;
+.eap-badge--warning {
+    background: var(--eap-warning-bg, rgba(255, 184, 108, 0.1));
+    color: var(--eap-neon-orange, #ffb86c);
 }
 
-.eap-logger-form-input,
-.eap-logger-form-select {
-    width: 100%;
-    padding: 10px 14px;
-    border: 1px solid var(--eap-border-color, #e5e7eb);
-    border-radius: 8px;
-    font-size: 14px;
-    background: var(--eap-input-bg, #fff);
-    color: var(--eap-text-primary, #111827);
-    transition: border-color 0.2s, box-shadow 0.2s;
+.eap-badge--info {
+    background: var(--eap-info-bg, rgba(0, 212, 255, 0.1));
+    color: var(--eap-neon-cyan, #00d4ff);
 }
 
-.eap-logger-form-input:focus,
-.eap-logger-form-select:focus {
-    outline: none;
-    border-color: var(--eap-primary, #3b82f6);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+.eap-badge--secondary {
+    background: rgba(107, 114, 128, 0.15);
+    color: var(--eap-text-secondary, #8b949e);
 }
 
-.eap-logger-form-hint {
-    font-size: 12px;
-    color: var(--eap-text-muted, #6b7280);
-    margin-top: 6px;
+.eap-badge--outline {
+    background: transparent;
+    border: 1px solid var(--eap-border, #3d444d);
+    color: var(--eap-text-secondary, #8b949e);
 }
 
-.eap-logger-form-hint a {
-    color: var(--eap-primary, #3b82f6);
+/* ==========================================================================
+   Checkboxes (styled for dark theme)
+   ========================================================================== */
+
+.eap-logger-table input[type="checkbox"],
+.eap-logger-filters input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--eap-neon-cyan, #00d4ff);
+    cursor: pointer;
 }
 
-/* Enable toggle */
-.eap-logger-enable-toggle {
+/* ==========================================================================
+   Per-page selector
+   ========================================================================== */
+
+.eap-logger-per-page {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: var(--eap-bg-secondary, #f9fafb);
-    border-radius: 10px;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-per-page select {
+    padding: 4px 8px;
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 4px;
+    background: var(--eap-abyss, #161b22);
+    color: var(--eap-text-primary, #e6edf3);
+    font-size: 13px;
+}
+
+/* ==========================================================================
+   Page Header Extensions
+   ========================================================================== */
+
+.eap-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.eap-page-header__content {
+    flex: 1;
+}
+
+.eap-page-header__actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* ==========================================================================
+   Log Files Grid
+   ========================================================================== */
+
+.eap-logger-files-section {
     margin-bottom: 24px;
 }
 
-.eap-logger-enable-toggle__switch {
+.eap-logger-files-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.eap-logger-file-card {
+    background: var(--eap-surface, #21262d);
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: box-shadow 0.2s, border-color 0.2s;
     position: relative;
-    width: 52px;
-    height: 28px;
-    flex-shrink: 0;
 }
 
-.eap-logger-enable-toggle__input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-    position: absolute;
+.eap-logger-file-card:hover {
+    box-shadow: var(--eap-glow-cyan, 0 0 20px rgba(0, 212, 255, 0.1));
+    border-color: var(--eap-border-light, #484f58);
 }
 
-.eap-logger-enable-toggle__slider {
+.eap-logger-file-card--today {
+    border-color: var(--eap-neon-green, #00ff88);
+}
+
+.eap-logger-file-card--today:hover {
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.15);
+}
+
+/* File card color accents */
+.eap-logger-file-card::before {
+    content: '';
     position: absolute;
-    cursor: pointer;
     top: 0;
     left: 0;
     right: 0;
-    bottom: 0;
-    background-color: #d1d5db;
-    transition: 0.3s;
-    border-radius: 28px;
+    height: 3px;
 }
 
-.eap-logger-enable-toggle__slider::before {
-    position: absolute;
-    content: "";
-    height: 22px;
-    width: 22px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
-    transition: 0.3s;
-    border-radius: 50%;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+.eap-logger-file-card--blue::before { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
+.eap-logger-file-card--purple::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+.eap-logger-file-card--cyan::before { background: linear-gradient(90deg, #00d4ff, #67e8f9); }
+.eap-logger-file-card--orange::before { background: linear-gradient(90deg, #f97316, #fb923c); }
+.eap-logger-file-card--green::before { background: linear-gradient(90deg, #00ff88, #4ade80); }
+.eap-logger-file-card--pink::before { background: linear-gradient(90deg, #ec4899, #f472b6); }
+.eap-logger-file-card--red::before { background: linear-gradient(90deg, #ff5555, #f87171); }
+.eap-logger-file-card--gray::before { background: linear-gradient(90deg, #6b7280, #9ca3af); }
+
+.eap-logger-file-card__link {
+    display: block;
+    padding: 16px;
+    text-decoration: none;
+    color: inherit;
 }
 
-.eap-logger-enable-toggle__input:checked + .eap-logger-enable-toggle__slider {
-    background-color: #22c55e;
-}
-
-.eap-logger-enable-toggle__input:checked + .eap-logger-enable-toggle__slider::before {
-    transform: translateX(24px);
-}
-
-.eap-logger-enable-toggle__text {
-    flex: 1;
-}
-
-.eap-logger-enable-toggle__title {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--eap-text-primary, #111827);
-    margin: 0 0 2px 0;
-}
-
-.eap-logger-enable-toggle__desc {
-    font-size: 13px;
-    color: var(--eap-text-muted, #6b7280);
-    margin: 0;
-}
-
-/* Channel checkboxes */
-.eap-logger-channel-checkboxes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.eap-logger-channel-checkbox {
+.eap-logger-file-card__header {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: var(--eap-bg-secondary, #f9fafb);
-    border: 1px solid var(--eap-border-color, #e5e7eb);
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background 0.2s, border-color 0.2s;
+    gap: 12px;
+    margin-bottom: 12px;
 }
 
-.eap-logger-channel-checkbox:hover {
-    background: var(--eap-bg-hover, #f3f4f6);
-}
-
-.eap-logger-channel-checkbox__input {
-    width: 16px;
-    height: 16px;
-    accent-color: var(--eap-primary, #3b82f6);
-}
-
-.eap-logger-channel-checkbox--disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* Info card */
-.eap-logger-info-card {
-    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-    border: 1px solid #bfdbfe;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 20px;
-}
-
-.eap-logger-info-card__title {
-    font-size: 15px;
-    font-weight: 600;
-    color: #1e40af;
-    margin: 0 0 12px 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.eap-logger-info-card__content {
-    font-size: 13px;
-    color: #1e3a8a;
-    line-height: 1.6;
-}
-
-.eap-logger-info-card__content p {
-    margin: 0 0 8px 0;
-}
-
-.eap-logger-info-card__content strong {
-    color: #1e40af;
-}
-
-/* Steps */
-.eap-logger-steps {
-    counter-reset: step;
-}
-
-.eap-logger-step {
-    display: flex;
-    gap: 16px;
-    margin-bottom: 20px;
-}
-
-.eap-logger-step:last-child {
-    margin-bottom: 0;
-}
-
-.eap-logger-step__number {
-    width: 32px;
-    height: 32px;
-    background: var(--eap-primary, #3b82f6);
-    color: white;
-    border-radius: 50%;
+.eap-logger-file-card__icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 14px;
-    font-weight: 600;
     flex-shrink: 0;
 }
 
-.eap-logger-step__content {
-    flex: 1;
-    padding-top: 4px;
+.eap-logger-file-card--blue .eap-logger-file-card__icon { background-color: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.eap-logger-file-card--purple .eap-logger-file-card__icon { background-color: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+.eap-logger-file-card--cyan .eap-logger-file-card__icon { background-color: rgba(0, 212, 255, 0.15); color: #00d4ff; }
+.eap-logger-file-card--orange .eap-logger-file-card__icon { background-color: rgba(249, 115, 22, 0.15); color: #fb923c; }
+.eap-logger-file-card--green .eap-logger-file-card__icon { background-color: rgba(0, 255, 136, 0.15); color: #00ff88; }
+.eap-logger-file-card--pink .eap-logger-file-card__icon { background-color: rgba(236, 72, 153, 0.15); color: #f472b6; }
+.eap-logger-file-card--red .eap-logger-file-card__icon { background-color: rgba(255, 85, 85, 0.15); color: #ff5555; }
+.eap-logger-file-card--gray .eap-logger-file-card__icon { background-color: rgba(107, 114, 128, 0.15); color: #9ca3af; }
+
+.eap-logger-file-card__icon svg {
+    width: 18px;
+    height: 18px;
 }
 
-.eap-logger-step__title {
+.eap-logger-file-card__info {
+    flex: 1;
+    min-width: 0;
+}
+
+.eap-logger-file-card__channel {
+    display: block;
     font-size: 14px;
     font-weight: 600;
-    color: var(--eap-text-primary, #111827);
-    margin: 0 0 4px 0;
+    color: var(--eap-text-primary, #e6edf3);
 }
 
-.eap-logger-step__desc {
-    font-size: 13px;
-    color: var(--eap-text-muted, #6b7280);
-    margin: 0;
-}
-
-.eap-logger-step__desc code {
-    background: var(--eap-bg-secondary, #f1f5f9);
-    padding: 2px 6px;
-    border-radius: 4px;
+.eap-logger-file-card__date {
+    display: block;
     font-size: 12px;
+    color: var(--eap-text-muted, #6e7681);
 }
 
-.eap-logger-step__desc a {
-    color: var(--eap-primary, #3b82f6);
+.eap-logger-file-card__today-badge {
+    margin-left: auto;
 }
 
-/* Test result */
-.eap-logger-test-result {
+.eap-logger-file-card__name {
+    font-family: var(--eap-font-mono, monospace);
+    font-size: 12px;
+    color: var(--eap-neon-cyan, #00d4ff);
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+
+.eap-logger-file-card__meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-file-card__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    padding: 8px 16px 12px;
+    border-top: 1px solid var(--eap-border, #3d444d);
+    background: var(--eap-elevated, #30363d);
+}
+
+/* ==========================================================================
+   Log Viewer
+   ========================================================================== */
+
+.eap-logger-viewer-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding: 12px 16px;
+    background: var(--eap-surface, #21262d);
+    border: 1px solid var(--eap-border, #3d444d);
     border-radius: 8px;
-    font-size: 14px;
-    margin-top: 16px;
-    display: none;
+    margin-bottom: 16px;
 }
 
-.eap-logger-test-result--success {
-    background: #dcfce7;
-    color: #166534;
-    border: 1px solid #86efac;
+.eap-logger-viewer-controls__info {
+    font-size: 13px;
+    color: var(--eap-text-secondary, #8b949e);
 }
 
-.eap-logger-test-result--error {
-    background: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #fca5a5;
+.eap-logger-viewer-controls__right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.eap-logger-test-result.show {
+.eap-logger-viewer-controls__label {
+    font-size: 13px;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-viewer-controls__select {
+    padding: 6px 12px;
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 6px;
+    background: var(--eap-abyss, #161b22);
+    color: var(--eap-text-primary, #e6edf3);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.eap-logger-viewer-controls__select:focus {
+    outline: none;
+    border-color: var(--eap-neon-cyan, #00d4ff);
+}
+
+.eap-logger-viewer {
+    margin-bottom: 16px;
+}
+
+.eap-logger-viewer__body {
+    padding: 0 !important;
+    max-height: 700px;
+    overflow-y: auto;
+}
+
+.eap-logger-lines {
+    font-family: var(--eap-font-mono, 'JetBrains Mono', monospace);
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.eap-logger-line {
+    display: flex;
+    align-items: flex-start;
+    border-bottom: 1px solid var(--eap-border, #3d444d);
+    transition: background 0.15s;
+}
+
+.eap-logger-line:hover {
+    background: var(--eap-elevated, #30363d);
+}
+
+.eap-logger-line--danger {
+    background: rgba(255, 85, 85, 0.05);
+}
+
+.eap-logger-line--danger:hover {
+    background: rgba(255, 85, 85, 0.1);
+}
+
+.eap-logger-line--warning {
+    background: rgba(255, 184, 108, 0.05);
+}
+
+.eap-logger-line--warning:hover {
+    background: rgba(255, 184, 108, 0.1);
+}
+
+.eap-logger-line__number {
+    flex-shrink: 0;
+    width: 60px;
+    padding: 8px 12px;
+    text-align: right;
+    color: var(--eap-text-muted, #6e7681);
+    background: var(--eap-abyss, #161b22);
+    border-right: 1px solid var(--eap-border, #3d444d);
+    user-select: none;
+}
+
+.eap-logger-line__content {
+    flex: 1;
+    padding: 8px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.eap-logger-line__time {
+    color: var(--eap-text-muted, #6e7681);
+    white-space: nowrap;
+}
+
+.eap-logger-line__channel {
+    color: var(--eap-neon-purple, #bd93f9);
+    white-space: nowrap;
+}
+
+.eap-logger-line__level {
+    flex-shrink: 0;
+}
+
+.eap-logger-line__message {
+    color: var(--eap-text-primary, #e6edf3);
+    word-break: break-word;
+}
+
+/* ==========================================================================
+   Path Info
+   ========================================================================== */
+
+.eap-logger-path-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--eap-surface, #21262d);
+    border: 1px solid var(--eap-border, #3d444d);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-path-info code {
+    font-family: var(--eap-font-mono, monospace);
+    color: var(--eap-text-secondary, #8b949e);
+}
+
+.eap-logger-path-info svg {
+    flex-shrink: 0;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+/* ==========================================================================
+   Pagination Extensions
+   ========================================================================== */
+
+.eap-logger-pagination__ellipsis {
+    padding: 6px 8px;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-pagination__link svg {
     display: block;
 }
 
-/* Back link */
-.eap-logger-back-link {
-    margin-bottom: 8px;
+/* ==========================================================================
+   Badge Success (for today indicator)
+   ========================================================================== */
+
+.eap-badge--success {
+    background: rgba(0, 255, 136, 0.1);
+    color: var(--eap-neon-green, #00ff88);
 }
