@@ -17,8 +17,11 @@ Part of the **Enterprise Lightning Framework** - integrates with admin-panel and
 - **Multiple output formats**: JSON, human-readable, pretty-printed
 - **File rotation**: Daily/hourly rotation with compression
 - **Context enrichment**: Automatic request ID, memory, timing
-- **Telegram notifications**: Separate notification level from channel level
+- **Telegram notifications**: Separate notification level from channel level with password visibility toggle
 - **Admin panel integration**: UI for channel configuration when admin-panel is installed
+- **JavaScript error logging**: Client-side error capture with rate limiting
+- **Nginx/Apache log parsing**: View and search server access logs
+- **PHP error log viewer**: Monitor PHP errors from admin panel
 
 ## 🏗️ Enterprise Framework Integration
 
@@ -513,6 +516,7 @@ Logger::debug('Session synced');
 | `Logger::debug_general($level, $msg, $ctx)` | `debug_general` | Debug logs, workers |
 | `Logger::performance($level, $msg, $ctx)` | `performance` | Performance metrics |
 | `Logger::js_errors($level, $msg, $ctx)` | `js_errors` | Frontend JavaScript errors |
+| `Logger::error_channel($level, $msg, $ctx)` | `error` | Application errors |
 | `Logger::channel($ch, $lvl, $msg, $ctx)` | custom | Custom channel |
 
 ### Complete Example
@@ -989,6 +993,10 @@ This package has the following limitations:
 - **Circular reference detection**: Context sanitization detects and handles object cycles
 - **SQL injection protection**: DatabaseHandler validates table names and uses prepared statements
 - **Chained exception support**: Previous exceptions are normalized recursively (with depth limit)
+- **CSRF protection**: All admin forms use stateless CSRF tokens (60-minute validity)
+- **Rate limiting**: API endpoints protected against abuse (configurable limits)
+- **AES-256-GCM encryption**: Telegram bot tokens encrypted at rest when APP_KEY is set
+- **CSP compliance**: No inline scripts or styles in admin views
 
 ## Framework Compatibility
 
@@ -1012,7 +1020,9 @@ Tested compatible with:
 7. **Multiple backends** - File, database (MySQL/PostgreSQL/SQLite), Redis, webhooks
 8. **Async support** - AsyncHandler with fork/shutdown/fastcgi strategies
 9. **Alerting** - WebhookHandler with Slack/Discord/Teams integration
-10. **169 passing tests** - Including security, integration, and real file I/O tests
+10. **Comprehensive test suite** - Including security, integration, and real file I/O tests
+11. **Admin UI** - Web interface for channel configuration, Telegram setup, log viewing
+12. **Server log parsing** - Nginx/Apache access log viewer with filtering
 
 ### What It Lacks for Full Enterprise
 
