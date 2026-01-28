@@ -216,8 +216,8 @@ final class RateLimiter
             return;
         }
 
-        // Add current timestamp to sorted set
-        $redis->zAdd($key, $now, (string) $now . '.' . mt_rand());
+        // Add current timestamp to sorted set with cryptographically secure suffix
+        $redis->zAdd($key, $now, (string) $now . '.' . bin2hex(random_bytes(8)));
         $redis->expire($key, $windowSeconds + 1);
     }
 

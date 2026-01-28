@@ -1015,10 +1015,15 @@ final class LoggerController extends BaseController
      */
     public function logJsError(): Response
     {
-        // Set CORS headers for browser requests
-        header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: POST, OPTIONS');
-        header('Access-Control-Allow-Headers: Content-Type');
+        // Set CORS headers with origin validation (not wildcard)
+        $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+        if ($this->isOriginAllowed($origin)) {
+            header('Access-Control-Allow-Origin: ' . $origin);
+            header('Access-Control-Allow-Methods: POST, OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type');
+            header('Access-Control-Max-Age: 86400'); // Cache preflight for 24h
+            header('Vary: Origin'); // Required for proper caching
+        }
 
         // Handle preflight OPTIONS request
         if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -1940,5 +1945,87 @@ final class LoggerController extends BaseController
         } catch (\Throwable $e) {
             return $nginxTimestamp;
         }
+    }
+
+    /**
+     * Check if an origin is allowed for CORS requests
+     *
+     * Supports:
+     * - Exact match (https://example.com)
+     * - Wildcard subdomains (*.example.com matches sub.example.com)
+     * - Same-origin fallback when no config provided
+     *
+     * @param string $origin The Origin header value
+     * @return bool True if origin is allowed
+     */
+    private function isOriginAllowed(string $origin): bool
+    {
+        if (empty($origin)) {
+            return false;
+        }
+
+        $allowedOrigins = $this->getAllowedCorsOrigins();
+
+        // If wildcard is explicitly configured, allow all
+        if (in_array('*', $allowedOrigins, true)) {
+            return true;
+        }
+
+        // Parse origin to extract host
+        $originHost = parse_url($origin, PHP_URL_HOST);
+        if ($originHost === null || $originHost === false) {
+            return false;
+        }
+
+        foreach ($allowedOrigins as $allowed) {
+            // Exact match
+            if ($allowed === $origin) {
+                return true;
+            }
+
+            // Wildcard subdomain match (*.example.com)
+            if (str_starts_with($allowed, '*.')) {
+                $domain = substr($allowed, 2);
+                if ($originHost === $domain || str_ends_with($originHost, '.' . $domain)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get allowed CORS origins from configuration
+     *
+     * Priority:
+     * 1. JS_ERROR_CORS_ORIGINS environment variable (comma-separated)
+     * 2. Same-origin based on HTTP_HOST (secure default)
+     *
+     * Examples:
+     * - JS_ERROR_CORS_ORIGINS="https://example.com,https://app.example.com"
+     * - JS_ERROR_CORS_ORIGINS="*.example.com" (wildcard subdomains)
+     * - JS_ERROR_CORS_ORIGINS="*" (allow all - NOT recommended)
+     *
+     * @return array<string> List of allowed origins
+     */
+    private function getAllowedCorsOrigins(): array
+    {
+        $envOrigins = $_ENV['JS_ERROR_CORS_ORIGINS'] ?? getenv('JS_ERROR_CORS_ORIGINS') ?: null;
+
+        if ($envOrigins !== null && $envOrigins !== '' && $envOrigins !== false) {
+            return array_map('trim', explode(',', $envOrigins));
+        }
+
+        // Default: same-origin only (secure default)
+        $host = $_SERVER['HTTP_HOST'] ?? '';
+        if (empty($host)) {
+            return [];
+        }
+
+        // Build origin from current request
+        $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+
+        return [$scheme . '://' . $host];
     }
 }

@@ -93,8 +93,15 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
         parent::__construct($level, $bubble);
 
         // Validate table name (prevent SQL injection)
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table)) {
-            throw new \InvalidArgumentException('Invalid table name');
+        // 1. Must start with letter/underscore, contain only alphanumeric/underscore
+        // 2. Max 63 characters (PostgreSQL limit, MySQL is 64)
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/', $table)) {
+            throw new \InvalidArgumentException('Invalid table name: must be alphanumeric with max 63 characters');
+        }
+
+        // 3. Block system table prefixes (defense-in-depth)
+        if (preg_match('/^(pg_|mysql\.|information_schema|sys\.|sqlite_)/i', $table)) {
+            throw new \InvalidArgumentException('System table names are not allowed');
         }
 
         $this->pdo = $pdo;
@@ -228,9 +235,12 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
     {
         $driver ??= $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 
-        // Validate table name
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table)) {
-            throw new \InvalidArgumentException('Invalid table name');
+        // Validate table name (same rules as constructor)
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/', $table)) {
+            throw new \InvalidArgumentException('Invalid table name: must be alphanumeric with max 63 characters');
+        }
+        if (preg_match('/^(pg_|mysql\.|information_schema|sys\.|sqlite_)/i', $table)) {
+            throw new \InvalidArgumentException('System table names are not allowed');
         }
 
         $sql = match ($driver) {
@@ -314,9 +324,12 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
     {
         $table = $filters['table'] ?? 'logs';
 
-        // Validate table name
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $table)) {
-            throw new \InvalidArgumentException('Invalid table name');
+        // Validate table name (same rules as constructor)
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/', $table)) {
+            throw new \InvalidArgumentException('Invalid table name: must be alphanumeric with max 63 characters');
+        }
+        if (preg_match('/^(pg_|mysql\.|information_schema|sys\.|sqlite_)/i', $table)) {
+            throw new \InvalidArgumentException('System table names are not allowed');
         }
 
         $where = [];
