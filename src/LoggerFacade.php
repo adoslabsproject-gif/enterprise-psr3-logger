@@ -38,6 +38,11 @@ namespace AdosLabs\EnterprisePSR3Logger;
 class LoggerFacade
 {
     /**
+     * Default timezone for logs (Europe/Rome = CET/CEST)
+     */
+    private const DEFAULT_TIMEZONE = 'Europe/Rome';
+
+    /**
      * @var array<string, Logger> Registered loggers per channel
      */
     private static array $loggers = [];
@@ -46,6 +51,11 @@ class LoggerFacade
      * @var callable|null Factory for creating new loggers
      */
     private static $loggerFactory = null;
+
+    /**
+     * @var bool Whether timezone has been initialized
+     */
+    private static bool $timezoneInitialized = false;
 
     /**
      * Set the logger factory
@@ -65,6 +75,9 @@ class LoggerFacade
      */
     private static function getLogger(string $channel): Logger
     {
+        // Ensure timezone is set before any logging
+        self::ensureTimezone();
+
         if (!isset(self::$loggers[$channel])) {
             if (self::$loggerFactory !== null) {
                 self::$loggers[$channel] = (self::$loggerFactory)($channel);
@@ -75,6 +88,50 @@ class LoggerFacade
         }
 
         return self::$loggers[$channel];
+    }
+
+    /**
+     * Ensure timezone is properly set for logging
+     *
+     * Priority:
+     * 1. APP_TIMEZONE environment variable
+     * 2. date.timezone from php.ini (if not empty/UTC)
+     * 3. Default to Europe/Rome
+     *
+     * This is called once per request to ensure Monolog uses local time.
+     */
+    private static function ensureTimezone(): void
+    {
+        if (self::$timezoneInitialized) {
+            return;
+        }
+
+        self::$timezoneInitialized = true;
+
+        // Check APP_TIMEZONE environment variable
+        $envTimezone = $_ENV['APP_TIMEZONE'] ?? getenv('APP_TIMEZONE');
+        $timezone = is_string($envTimezone) && $envTimezone !== '' ? $envTimezone : null;
+
+        if ($timezone === null) {
+            // Check php.ini date.timezone
+            $iniTimezone = ini_get('date.timezone');
+            // Use ini timezone only if it's set and NOT UTC (common misconfiguration)
+            if (is_string($iniTimezone) && $iniTimezone !== '' && strtoupper($iniTimezone) !== 'UTC') {
+                $timezone = $iniTimezone;
+            }
+        }
+
+        // Default to Europe/Rome if still not set or is UTC
+        if ($timezone === null || strtoupper($timezone) === 'UTC') {
+            $timezone = self::DEFAULT_TIMEZONE;
+        }
+
+        try {
+            date_default_timezone_set($timezone);
+        } catch (\Throwable $e) {
+            // Fallback to default on any error
+            date_default_timezone_set(self::DEFAULT_TIMEZONE);
+        }
     }
 
     // ========================================================================
