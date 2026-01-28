@@ -95,31 +95,26 @@ final class LoggerAdminModule implements AdminModuleInterface
 
     public function getTabs(): array
     {
+        // URLs are relative - the sidebar renderer adds the admin base path
         return [
             [
                 'id' => 'logger',
                 'label' => 'Logs',
-                'url' => '/admin/logger',
+                'url' => '/logger',
                 'icon' => 'file-text',
                 'priority' => 50,
                 'children' => [
                     [
                         'id' => 'logger-dashboard',
                         'label' => 'Dashboard',
-                        'url' => '/admin/logger',
+                        'url' => '/logger',
                         'icon' => 'activity',
                     ],
                     [
                         'id' => 'logger-telegram',
                         'label' => 'Telegram',
-                        'url' => '/admin/logger/telegram',
+                        'url' => '/logger/telegram',
                         'icon' => 'send',
-                    ],
-                    [
-                        'id' => 'logger-php-errors',
-                        'label' => 'PHP Errors',
-                        'url' => '/admin/logger/php-errors',
-                        'icon' => 'alert-triangle',
                     ],
                 ],
             ],
@@ -130,24 +125,26 @@ final class LoggerAdminModule implements AdminModuleInterface
     {
         $controller = Controllers\LoggerController::class;
 
+        // Routes are relative to admin base path (e.g., /x-abc123/)
+        // The router matches against $relativePath which excludes the base prefix
         return [
             // Main Dashboard (channels config + log files list)
-            ['method' => 'GET', 'path' => '/admin/logger', 'handler' => [$controller, 'index']],
+            ['method' => 'GET', 'path' => '/logger', 'handler' => [$controller, 'index']],
 
             // View specific log file
-            ['method' => 'GET', 'path' => '/admin/logger/view', 'handler' => [$controller, 'viewFile']],
+            ['method' => 'GET', 'path' => '/logger/view', 'handler' => [$controller, 'viewFile']],
 
             // Channel configuration (AJAX)
-            ['method' => 'POST', 'path' => '/admin/logger/channel/update', 'handler' => [$controller, 'updateChannel']],
+            ['method' => 'POST', 'path' => '/logger/channel/update', 'handler' => [$controller, 'updateChannel']],
 
             // File actions
-            ['method' => 'POST', 'path' => '/admin/logger/file/clear', 'handler' => [$controller, 'clearFile']],
-            ['method' => 'GET', 'path' => '/admin/logger/file/download', 'handler' => [$controller, 'downloadFile']],
+            ['method' => 'POST', 'path' => '/logger/file/clear', 'handler' => [$controller, 'clearFile']],
+            ['method' => 'GET', 'path' => '/logger/file/download', 'handler' => [$controller, 'downloadFile']],
 
             // Telegram configuration page
-            ['method' => 'GET', 'path' => '/admin/logger/telegram', 'handler' => [$controller, 'telegram']],
-            ['method' => 'POST', 'path' => '/admin/logger/telegram/update', 'handler' => [$controller, 'updateTelegram']],
-            ['method' => 'POST', 'path' => '/admin/logger/telegram/test', 'handler' => [$controller, 'testTelegram']],
+            ['method' => 'GET', 'path' => '/logger/telegram', 'handler' => [$controller, 'telegram']],
+            ['method' => 'POST', 'path' => '/logger/telegram/update', 'handler' => [$controller, 'updateTelegram']],
+            ['method' => 'POST', 'path' => '/logger/telegram/test', 'handler' => [$controller, 'testTelegram']],
         ];
     }
 
