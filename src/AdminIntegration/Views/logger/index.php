@@ -156,10 +156,11 @@ $debugLevels = ['debug', 'info', 'notice'];
             </div>
         </div>
 
-        <!-- Auto-Reset Toggle -->
+        <!-- Auto-Reset Toggle (only shown for debug levels < WARNING) -->
         <?php
             $autoResetEnabled = $channel['auto_reset_enabled'] ?? true; // Default ON
         ?>
+        <?php if ($isDebugLevel): ?>
         <div class="eap-logger-channel-card__auto-reset-toggle">
             <label class="eap-logger-auto-reset-switch">
                 <input type="checkbox"
@@ -186,6 +187,15 @@ $debugLevels = ['debug', 'info', 'notice'];
                 <?= $getIcon('alert-triangle') ?>
             </svg>
             <span>Resets to WARNING in <strong class="auto-reset-time"><?= $hoursRemaining ?>h <?= $minutesRemaining ?>m</strong></span>
+        </div>
+        <?php endif; ?>
+        <?php else: ?>
+        <!-- Level is already WARNING or above - no auto-reset needed -->
+        <div class="eap-logger-channel-card__auto-reset-info">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <?= $getIcon('check') ?>
+            </svg>
+            <span>Level is <?= ucfirst($channel['level']) ?> - no auto-reset needed</span>
         </div>
         <?php endif; ?>
 

@@ -8,8 +8,10 @@ use AdosLabs\EnterprisePSR3Logger\Formatters\DetailedLineFormatter;
 use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
 use AdosLabs\EnterprisePSR3Logger\Formatters\PrettyFormatter;
 use AdosLabs\EnterprisePSR3Logger\Handlers\FilterHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\RedisBufferHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\UdpSyslogHandler;
 use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\HostnameProcessor;
 use AdosLabs\EnterprisePSR3Logger\Processors\MemoryProcessor;
@@ -28,6 +30,8 @@ use Monolog\Level;
  * - container(): JSON to stdout for Docker/Kubernetes
  * - minimal(): Simple file logging
  * - full(): Everything enabled
+ * - udpSyslog(): Zero-overhead UDP syslog (~0.01ms per log)
+ * - redisBuffered(): Async Redis queue with Docker worker (~0.1ms per log)
  *
  * USAGE:
  * ```php
@@ -261,6 +265,151 @@ class LoggerFactory
     }
 
     /**
+     * Create a zero-overhead UDP syslog logger
+     *
+     * Features:
+     * - Fire-and-forget UDP (~0.01ms per log entry)
+     * - RFC 5424 compliant format
+     * - Non-blocking socket
+     * - Perfect for high-throughput applications
+     *
+     * ARCHITECTURE:
+     * ```
+     * PHP Request → UDP Socket → Syslog Server → Log Aggregator
+     *     │              │
+     *     └─ ~0.01ms     └─ No ACK, fire-and-forget
+     * ```
+     *
+     * @param string $channel Channel name
+     * @param string $syslogHost Syslog server host
+     * @param int $syslogPort Syslog server port (514 standard, 1514 for TLS relay)
+     * @param int $facility Syslog facility (default: LOCAL0)
+     * @param Level $minLevel Minimum log level
+     * @return Logger
+     */
+    public static function udpSyslog(
+        string $channel = 'app',
+        string $syslogHost = '127.0.0.1',
+        int $syslogPort = 514,
+        int $facility = UdpSyslogHandler::FACILITY_LOCAL0,
+        Level $minLevel = Level::Info,
+    ): Logger {
+        $handler = new UdpSyslogHandler(
+            host: $syslogHost,
+            port: $syslogPort,
+            appName: $channel,
+            facility: $facility,
+            level: $minLevel,
+        );
+
+        $logger = new Logger($channel, [$handler]);
+
+        $logger->addProcessor(new RequestProcessor());
+        $logger->addProcessor(new HostnameProcessor());
+
+        return $logger;
+    }
+
+    /**
+     * Create a Redis-buffered async logger
+     *
+     * Features:
+     * - Non-blocking Redis LPUSH (~0.1ms per log entry)
+     * - Background worker writes to files (no request impact)
+     * - Automatic batching for efficiency
+     * - Graceful fallback if Redis unavailable
+     *
+     * ARCHITECTURE:
+     * ```
+     * PHP Request → LPUSH to Redis → Worker Container → File/DB
+     *     │                              │
+     *     └─ ~0.1ms                      └─ Background (no request impact)
+     * ```
+     *
+     * REQUIREMENTS:
+     * - Redis server
+     * - Log worker running (see docker/log-worker/)
+     *
+     * @param \Redis $redis Connected Redis instance
+     * @param string $channel Channel name
+     * @param string|null $fallbackPath Fallback file path if Redis fails
+     * @param Level $minLevel Minimum log level
+     * @return Logger
+     */
+    public static function redisBuffered(
+        \Redis $redis,
+        string $channel = 'app',
+        ?string $fallbackPath = null,
+        Level $minLevel = Level::Debug,
+    ): Logger {
+        $handler = new RedisBufferHandler(
+            redis: $redis,
+            appName: $channel,
+            level: $minLevel,
+        );
+
+        if ($fallbackPath !== null) {
+            $handler->setFallbackPath($fallbackPath);
+        }
+
+        $logger = new Logger($channel, [$handler]);
+
+        $logger->addProcessor(new RequestProcessor());
+        $logger->addProcessor(new HostnameProcessor());
+
+        return $logger;
+    }
+
+    /**
+     * Create a hybrid logger (Redis buffer + UDP syslog backup)
+     *
+     * Features:
+     * - Primary: Redis buffer for async file writing
+     * - Secondary: UDP syslog for real-time monitoring
+     * - Best of both worlds: persistent logs + real-time visibility
+     *
+     * @param \Redis $redis Connected Redis instance
+     * @param string $channel Channel name
+     * @param string $syslogHost Syslog server host
+     * @param int $syslogPort Syslog server port
+     * @param string|null $fallbackPath Fallback file path
+     * @return Logger
+     */
+    public static function hybrid(
+        \Redis $redis,
+        string $channel = 'app',
+        string $syslogHost = '127.0.0.1',
+        int $syslogPort = 514,
+        ?string $fallbackPath = null,
+    ): Logger {
+        // Primary: Redis buffer for persistent logs
+        $redisHandler = new RedisBufferHandler(
+            redis: $redis,
+            appName: $channel,
+            level: Level::Debug,
+        );
+
+        if ($fallbackPath !== null) {
+            $redisHandler->setFallbackPath($fallbackPath);
+        }
+
+        // Secondary: UDP syslog for real-time monitoring (warnings+)
+        $syslogHandler = new UdpSyslogHandler(
+            host: $syslogHost,
+            port: $syslogPort,
+            appName: $channel,
+            level: Level::Warning,
+        );
+
+        $logger = new Logger($channel, [$redisHandler, $syslogHandler]);
+
+        $logger->addProcessor(new RequestProcessor());
+        $logger->addProcessor(new HostnameProcessor());
+
+        return $logger;
+    }
+
+    /**
      * Create a logger from configuration array
      *
      * @param array{
@@ -348,6 +497,39 @@ class LoggerFactory
 
             case 'errorlog':
                 $handler = new Handlers\ErrorLogHandler($level);
+                break;
+
+            case 'udp_syslog':
+                $handler = new UdpSyslogHandler(
+                    host: $config['host'] ?? '127.0.0.1',
+                    port: $config['port'] ?? 514,
+                    appName: $config['app_name'] ?? 'app',
+                    facility: $config['facility'] ?? UdpSyslogHandler::FACILITY_LOCAL0,
+                    level: $level,
+                );
+                if (isset($config['max_message_size'])) {
+                    $handler->setMaxMessageSize((int) $config['max_message_size']);
+                }
+                if (isset($config['structured_data'])) {
+                    $handler->setIncludeStructuredData((bool) $config['structured_data']);
+                }
+                break;
+
+            case 'redis_buffer':
+                if (!isset($config['redis']) || !$config['redis'] instanceof \Redis) {
+                    return null; // Redis instance required
+                }
+                $handler = new RedisBufferHandler(
+                    redis: $config['redis'],
+                    appName: $config['app_name'] ?? 'app',
+                    level: $level,
+                );
+                if (isset($config['fallback_path'])) {
+                    $handler->setFallbackPath($config['fallback_path']);
+                }
+                if (isset($config['include_metadata'])) {
+                    $handler->setIncludeMetadata((bool) $config['include_metadata']);
+                }
                 break;
 
             default:

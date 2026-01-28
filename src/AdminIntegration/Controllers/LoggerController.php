@@ -287,9 +287,16 @@ final class LoggerController extends BaseController
         }
 
         // Read file with pagination
-        $lines = file($filepath, FILE_IGNORE_NEW_LINES) ?: [];
+        $allLines = file($filepath, FILE_IGNORE_NEW_LINES) ?: [];
+
+        // Filter out empty lines and count only non-empty lines
+        // This prevents "empty pages" issue where blank lines inflate the count
+        $lines = array_values(array_filter($allLines, fn ($line) => trim($line) !== ''));
         $totalLines = count($lines);
-        $pages = (int) ceil($totalLines / $perPage);
+        $pages = $totalLines > 0 ? (int) ceil($totalLines / $perPage) : 0;
+
+        // Clamp page to valid range
+        $page = max(1, min($page, max(1, $pages)));
 
         // Keep chronological order (oldest first, newest last)
         // Page 1 = first entries, last page = most recent entries

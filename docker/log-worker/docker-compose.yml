@@ -1,0 +1,74 @@
+# Log Worker Docker Compose
+#
+# USAGE:
+#   cd docker/log-worker
+#   docker-compose up -d
+#
+# This runs the log worker alongside your existing Redis instance.
+# The worker reads from Redis queue and writes logs to mounted volume.
+
+version: '3.8'
+
+services:
+  log-worker:
+    build:
+      context: ../..
+      dockerfile: docker/log-worker/Dockerfile
+    container_name: eap-log-worker
+    restart: unless-stopped
+    environment:
+      # Redis connection
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DATABASE: ${REDIS_DATABASE:-0}
+      # Worker config
+      LOG_APP_NAME: ${LOG_APP_NAME:-app}
+      LOG_PATH: /var/log/app
+      LOG_BATCH_SIZE: ${LOG_BATCH_SIZE:-100}
+      LOG_FLUSH_INTERVAL: ${LOG_FLUSH_INTERVAL:-5}
+      LOG_WORKER_VERBOSE: ${LOG_WORKER_VERBOSE:-false}
+    volumes:
+      # Mount your log directory
+      - ${LOG_VOLUME:-../../storage/logs}:/var/log/app
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  app-network:
+    external: true
+    name: ${NETWORK_NAME:-app-network}
+
+# ============================================================================
+# STANDALONE REDIS (uncomment if you don't have Redis already)
+# ============================================================================
+#
+#   redis:
+#     image: redis:7-alpine
+#     container_name: eap-redis
+#     restart: unless-stopped
+#     command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru
+#     volumes:
+#       - redis-data:/data
+#     networks:
+#       - app-network
+#     deploy:
+#       resources:
+#         limits:
+#           memory: 128M
+#
+# volumes:
+#   redis-data:
