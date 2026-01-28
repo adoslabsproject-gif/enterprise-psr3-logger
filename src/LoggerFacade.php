@@ -82,12 +82,80 @@ class LoggerFacade
             if (self::$loggerFactory !== null) {
                 self::$loggers[$channel] = (self::$loggerFactory)($channel);
             } else {
-                // Default: Create logger from LoggerRegistry
-                self::$loggers[$channel] = LoggerRegistry::get($channel) ?? new Logger($channel);
+                // Try LoggerRegistry first
+                $logger = LoggerRegistry::get($channel);
+
+                if ($logger === null) {
+                    // Create logger with default RotatingFileHandler
+                    $logger = self::createDefaultLogger($channel);
+                }
+
+                self::$loggers[$channel] = $logger;
             }
         }
 
         return self::$loggers[$channel];
+    }
+
+    /**
+     * Create a default logger with RotatingFileHandler
+     *
+     * This is used when no logger is registered in LoggerRegistry.
+     * Writes to storage/logs/{channel}-{date}.log
+     *
+     * @param string $channel Channel name
+     * @return Logger
+     */
+    private static function createDefaultLogger(string $channel): Logger
+    {
+        // Determine logs path
+        $logsPath = self::getLogsPath();
+
+        // Create rotating file handler
+        $handler = new Handlers\RotatingFileHandler(
+            filename: $logsPath . '/' . $channel . '.log',
+            level: \Monolog\Level::Debug,
+            rotationType: Handlers\RotatingFileHandler::ROTATION_DAILY,
+            maxFiles: 14,
+        );
+
+        // Use DetailedLineFormatter for human-readable logs
+        $handler->setFormatter(new Formatters\DetailedLineFormatter());
+
+        $logger = new Logger($channel, [$handler]);
+
+        // Add standard processors
+        $logger->addProcessor(new Processors\RequestProcessor());
+        $logger->addProcessor(new Processors\MemoryProcessor());
+
+        return $logger;
+    }
+
+    /**
+     * Get logs path from environment or default
+     *
+     * Priority:
+     * 1. LOG_PATH environment variable
+     * 2. EAP_PROJECT_ROOT/storage/logs
+     * 3. getcwd()/storage/logs
+     *
+     * @return string Logs directory path
+     */
+    private static function getLogsPath(): string
+    {
+        // Check environment variable
+        $logPath = $_ENV['LOG_PATH'] ?? getenv('LOG_PATH');
+        if (is_string($logPath) && $logPath !== '') {
+            return $logPath;
+        }
+
+        // Check project root constant
+        if (defined('EAP_PROJECT_ROOT')) {
+            return EAP_PROJECT_ROOT . '/storage/logs';
+        }
+
+        // Default to current working directory
+        return getcwd() . '/storage/logs';
     }
 
     /**
