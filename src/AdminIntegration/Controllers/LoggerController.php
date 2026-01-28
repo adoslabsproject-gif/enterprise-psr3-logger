@@ -1364,9 +1364,14 @@ final class LoggerController extends BaseController
                     default => 'info',
                 };
 
+                // Convert PHP error timestamp to local timezone
+                // PHP error format: 27-Jan-2026 15:30:45 UTC or 27-Jan-2026 15:30:45 Europe/Rome
+                $phpTimestamp = $matches[1];
+                $convertedTimestamp = $this->convertPhpErrorTimestamp($phpTimestamp);
+
                 $currentEntry = [
                     'raw' => $line,
-                    'timestamp' => $matches[1],
+                    'timestamp' => $convertedTimestamp,
                     'channel' => 'php',
                     'level' => $level,
                     'message' => $matches[2] . ': ' . $matches[3],
@@ -1612,6 +1617,42 @@ final class LoggerController extends BaseController
             date_default_timezone_set($timezone);
         } catch (\Throwable $e) {
             date_default_timezone_set(self::DEFAULT_TIMEZONE);
+        }
+    }
+
+    /**
+     * Convert PHP error timestamp to local timezone format
+     *
+     * PHP error logs use format: 27-Jan-2026 15:30:45 UTC
+     * We convert to: 2026-01-27 16:30:45 (local timezone)
+     *
+     * @param string $phpTimestamp PHP error timestamp (e.g., "27-Jan-2026 15:30:45 UTC")
+     * @return string Converted timestamp in Y-m-d H:i:s format
+     */
+    private function convertPhpErrorTimestamp(string $phpTimestamp): string
+    {
+        try {
+            // Parse timestamp - format is "27-Jan-2026 15:30:45" optionally followed by timezone
+            $parts = preg_split('/\s+/', trim($phpTimestamp), 3);
+            $dateTime = $parts[0] . ' ' . $parts[1];
+            $sourceTz = $parts[2] ?? 'UTC';
+
+            // Create DateTime with source timezone
+            $dt = \DateTime::createFromFormat('d-M-Y H:i:s', $dateTime, new \DateTimeZone($sourceTz));
+
+            if ($dt === false) {
+                // If parsing fails, return original
+                return $phpTimestamp;
+            }
+
+            // Convert to local timezone
+            $localTz = new \DateTimeZone(date_default_timezone_get());
+            $dt->setTimezone($localTz);
+
+            return $dt->format('Y-m-d H:i:s');
+        } catch (\Throwable $e) {
+            // On any error, return original timestamp
+            return $phpTimestamp;
         }
     }
 }
