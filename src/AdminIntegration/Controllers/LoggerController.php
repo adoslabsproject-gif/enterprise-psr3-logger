@@ -1210,6 +1210,10 @@ final class LoggerController extends BaseController
             $channel = 'unknown';
             if (preg_match('/^([a-z_]+)-\d{4}-\d{2}-\d{2}\.log$/', $file, $matches)) {
                 $channel = $matches[1];
+                // Map 'errors' to 'error' channel (legacy naming)
+                if ($channel === 'errors') {
+                    $channel = 'error';
+                }
             } elseif ($file === 'php_errors.log') {
                 $channel = 'php_errors';
             } elseif (str_starts_with($file, 'php-fpm')) {
