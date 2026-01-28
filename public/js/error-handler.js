@@ -329,6 +329,30 @@
     }
 
     /**
+     * Periodic cleanup of old error hashes to prevent memory accumulation
+     * on long-running single-page applications.
+     */
+    function startPeriodicCleanup() {
+        // Run cleanup every minute
+        setInterval(function() {
+            var now = Date.now();
+            var cutoff = now - config.dedupeWindowMs;
+            var cleanedCount = 0;
+
+            for (var key in state.recentErrors) {
+                if (state.recentErrors[key] < cutoff) {
+                    delete state.recentErrors[key];
+                    cleanedCount++;
+                }
+            }
+
+            if (config.debug && cleanedCount > 0) {
+                console.log('[PSR3] Cleaned ' + cleanedCount + ' old error hashes');
+            }
+        }, 60000); // Every 60 seconds
+    }
+
+    /**
      * Initialize error handler
      */
     function init() {
@@ -343,6 +367,9 @@
 
         // Wrap console
         wrapConsole();
+
+        // Start periodic cleanup to prevent memory leaks in SPAs
+        startPeriodicCleanup();
 
         // Send remaining errors on page unload
         window.addEventListener('beforeunload', function() {

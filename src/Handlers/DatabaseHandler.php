@@ -130,7 +130,10 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
     }
 
     /**
-     * Flush buffered records to database
+     * Flush buffered records to database using multi-row INSERT
+     *
+     * Uses a single INSERT statement with multiple value sets for better performance.
+     * Falls back to individual inserts if multi-row fails.
      */
     public function flush(): void
     {
@@ -138,17 +141,58 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
             return;
         }
 
+        $count = count($this->buffer);
+
         try {
             $this->pdo->beginTransaction();
 
+            // Build multi-row INSERT for better performance
+            // Each row has 8 columns: channel, level, level_value, message, context, extra, created_at, request_id
+            $placeholders = [];
+            $values = [];
+            $paramIndex = 0;
+
             foreach ($this->buffer as $record) {
-                $this->insertRecord($record);
+                $requestId = $record->extra['request_id'] ?? $record->context['request_id'] ?? null;
+
+                $placeholders[] = '(:channel' . $paramIndex . ', :level' . $paramIndex . ', :level_value' . $paramIndex .
+                    ', :message' . $paramIndex . ', :context' . $paramIndex . ', :extra' . $paramIndex .
+                    ', :created_at' . $paramIndex . ', :request_id' . $paramIndex . ')';
+
+                $values[':channel' . $paramIndex] = $record->channel;
+                $values[':level' . $paramIndex] = $record->level->name;
+                $values[':level_value' . $paramIndex] = $record->level->value;
+                $values[':message' . $paramIndex] = $record->message;
+                $values[':context' . $paramIndex] = json_encode($record->context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $values[':extra' . $paramIndex] = json_encode($record->extra, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $values[':created_at' . $paramIndex] = $record->datetime->format('Y-m-d H:i:s.u');
+                $values[':request_id' . $paramIndex] = $requestId;
+
+                $paramIndex++;
             }
+
+            $sql = "INSERT INTO {$this->table} (channel, level, level_value, message, context, extra, created_at, request_id) VALUES " .
+                implode(', ', $placeholders);
+
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($values);
 
             $this->pdo->commit();
         } catch (PDOException $e) {
             $this->pdo->rollBack();
-            error_log('DatabaseHandler: Batch insert failed - ' . $e->getMessage());
+            error_log('DatabaseHandler: Multi-row batch insert failed (' . $count . ' records) - ' . $e->getMessage());
+
+            // Fallback: try individual inserts (some DBs have placeholder limits)
+            try {
+                $this->pdo->beginTransaction();
+                foreach ($this->buffer as $record) {
+                    $this->insertRecord($record);
+                }
+                $this->pdo->commit();
+            } catch (PDOException $fallbackError) {
+                $this->pdo->rollBack();
+                error_log('DatabaseHandler: Fallback batch insert also failed - ' . $fallbackError->getMessage());
+            }
         }
 
         $this->buffer = [];

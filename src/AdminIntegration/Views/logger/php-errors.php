@@ -8,7 +8,7 @@
 <div class="eap-page">
     <div class="eap-page__header">
         <h1 class="eap-page__title">PHP Errors Log</h1>
-        <p class="eap-page__subtitle">View PHP error log: <?= htmlspecialchars($filepath ?? 'N/A') ?></p>
+        <p class="eap-page__subtitle">View PHP error log: <?= esc($filepath ?? 'N/A') ?></p>
     </div>
 
     <div class="eap-card">
@@ -24,10 +24,10 @@
         <div class="eap-card__body">
             <?php if ($exists ?? false): ?>
             <div class="eap-logger-php-errors-content">
-<?= htmlspecialchars($content ?? '') ?>
+<?= esc($content ?? '') ?>
             </div>
 
-            <form method="POST" action="<?= htmlspecialchars($admin_base_path) ?>/logger/php-errors/clear"
+            <form method="POST" action="<?= esc($admin_base_path) ?>/logger/php-errors/clear"
                   class="eap-logger-php-errors-form"
                   id="php-errors-clear-form">
                 <?= $csrf_input ?>

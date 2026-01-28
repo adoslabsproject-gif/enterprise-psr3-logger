@@ -205,8 +205,13 @@ final class LoggerController extends BaseController
         try {
             $this->encryption = new EncryptionService();
         } catch (\Throwable $e) {
-            // Encryption not available - log and continue
-            // Telegram tokens will be stored unencrypted (legacy mode)
+            // Encryption not available - Telegram tokens will be stored unencrypted (legacy mode)
+            // Log security warning to ensure visibility
+            error_log(
+                '[EnterprisePSR3Logger] SECURITY WARNING: Encryption unavailable - ' .
+                'Telegram bot tokens will be stored in plaintext. Set APP_KEY environment variable ' .
+                'for AES-256-GCM encryption. Error: ' . $e->getMessage()
+            );
             $this->encryption = null;
         }
 
@@ -566,7 +571,14 @@ final class LoggerController extends BaseController
                 $this->invalidateChannelCache($channel);
             }
         } catch (\Exception $e) {
-            // Silently fail - don't break the page
+            // Log to PHP error_log to avoid potential logging loop
+            // This ensures visibility into failures without risking recursive errors
+            error_log(sprintf(
+                '[EnterprisePSR3Logger] processAutoResets failed: %s in %s:%d',
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
         }
     }
 
@@ -1162,9 +1174,9 @@ final class LoggerController extends BaseController
         try {
             $stmt = $this->pdo->query('SELECT channel, min_level, enabled, auto_reset_enabled, auto_reset_at FROM log_channels');
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                // PostgreSQL returns 't'/'f' for boolean, normalize to bool
-                $row['enabled'] = $row['enabled'] === true || $row['enabled'] === 't' || $row['enabled'] === '1';
-                $row['auto_reset_enabled'] = $row['auto_reset_enabled'] === true || $row['auto_reset_enabled'] === 't' || $row['auto_reset_enabled'] === '1';
+                // Normalize database boolean values to PHP bool (handles PostgreSQL t/f, MySQL 0/1, etc.)
+                $row['enabled'] = $this->normalizeDbBool($row['enabled']);
+                $row['auto_reset_enabled'] = $this->normalizeDbBool($row['auto_reset_enabled']);
                 $dbChannels[$row['channel']] = $row;
             }
         } catch (\Exception $e) {
@@ -1178,9 +1190,9 @@ final class LoggerController extends BaseController
             $channels[$key] = array_merge($meta, [
                 'key' => $key,
                 'enabled' => $dbConfig !== null ? $dbConfig['enabled'] : true,
-                'level' => $dbConfig['min_level'] ?? 'warning',  // Default to WARNING (safe)
-                'auto_reset_enabled' => $dbConfig !== null ? $dbConfig['auto_reset_enabled'] : true,  // Default ON
-                'auto_reset_at' => $dbConfig['auto_reset_at'] ?? null,
+                'level' => $dbConfig !== null ? ($dbConfig['min_level'] ?? 'warning') : 'warning',
+                'auto_reset_enabled' => $dbConfig !== null ? $dbConfig['auto_reset_enabled'] : true,
+                'auto_reset_at' => $dbConfig !== null ? ($dbConfig['auto_reset_at'] ?? null) : null,
                 'allowed_levels' => $meta['allowed_levels'] ?? null,
             ]);
         }
@@ -1208,8 +1220,14 @@ final class LoggerController extends BaseController
             }
 
             $filepath = $this->logsPath . '/' . $file;
-            $size = filesize($filepath);
-            $modified = filemtime($filepath);
+
+            // Use single stat() call for both size and mtime (more efficient)
+            $stat = @stat($filepath);
+            if ($stat === false) {
+                continue; // Skip files we can't stat
+            }
+            $size = $stat['size'];
+            $modified = $stat['mtime'];
 
             // Extract channel from filename (e.g., "app-2026-01-27.log" -> "app")
             $channel = 'unknown';
@@ -1891,6 +1909,12 @@ final class LoggerController extends BaseController
         try {
             // Parse timestamp - format is "27-Jan-2026 15:30:45" optionally followed by timezone
             $parts = preg_split('/\s+/', trim($phpTimestamp), 3);
+
+            // Validate we have at least date and time parts
+            if (!is_array($parts) || count($parts) < 2 || empty($parts[0]) || empty($parts[1])) {
+                return $phpTimestamp;
+            }
+
             $dateTime = $parts[0] . ' ' . $parts[1];
             $sourceTz = $parts[2] ?? 'UTC';
 
@@ -2027,5 +2051,36 @@ final class LoggerController extends BaseController
         $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 
         return [$scheme . '://' . $host];
+    }
+
+    /**
+     * Normalize database boolean values to PHP bool
+     *
+     * PostgreSQL returns 't'/'f', MySQL returns 1/0, SQLite returns 1/0.
+     * This method handles all cases consistently.
+     *
+     * @param mixed $value The value from database
+     * @return bool Normalized boolean value
+     */
+    private function normalizeDbBool(mixed $value): bool
+    {
+        if ($value === null) {
+            return false;
+        }
+
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return $value !== 0;
+        }
+
+        if (is_string($value)) {
+            $lower = strtolower($value);
+            return in_array($lower, ['t', 'true', '1', 'yes', 'on'], true);
+        }
+
+        return (bool) $value;
     }
 }

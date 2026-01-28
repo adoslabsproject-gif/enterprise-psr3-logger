@@ -54,7 +54,7 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
             </svg>
-            <?= htmlspecialchars($filename) ?>
+            <?= esc($filename) ?>
         </h1>
         <?php if ($exists): ?>
         <p class="eap-page-subtitle">
@@ -66,7 +66,7 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
     </div>
     <div class="eap-page-header__actions">
         <?php if ($exists): ?>
-        <a href="<?= htmlspecialchars($admin_base_path) ?>/logger/file/download?file=<?= urlencode($filename) ?>"
+        <a href="<?= esc($admin_base_path) ?>/logger/file/download?file=<?= urlencode($filename) ?>"
            class="eap-btn eap-btn--secondary">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -76,7 +76,7 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
             Download
         </a>
         <?php endif; ?>
-        <a href="<?= htmlspecialchars($admin_base_path) ?>/logger" class="eap-btn eap-btn--ghost">
+        <a href="<?= esc($admin_base_path) ?>/logger" class="eap-btn eap-btn--ghost">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="19" y1="12" x2="5" y2="12"/>
                 <polyline points="12 19 5 12 12 5"/>
@@ -97,7 +97,7 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
                 <line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
             <p>File not found</p>
-            <p class="eap-logger-empty-state__hint">The log file "<?= htmlspecialchars($filename) ?>" does not exist.</p>
+            <p class="eap-logger-empty-state__hint">The log file "<?= esc($filename) ?>" does not exist.</p>
         </div>
     </div>
 </div>
@@ -154,23 +154,23 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
                 <div class="eap-logger-entry__header">
                     <span class="eap-logger-entry__number">#<?= number_format(($page - 1) * $per_page + $index + 1) ?></span>
                     <?php if ($line['timestamp']): ?>
-                    <span class="eap-logger-entry__time"><?= htmlspecialchars($line['timestamp']) ?></span>
+                    <span class="eap-logger-entry__time"><?= esc($line['timestamp']) ?></span>
                     <?php endif; ?>
                     <?php if (isset($line['channel'])): ?>
-                    <span class="eap-logger-entry__channel"><?= htmlspecialchars($line['channel']) ?></span>
+                    <span class="eap-logger-entry__channel"><?= esc($line['channel']) ?></span>
                     <?php endif; ?>
                     <span class="eap-badge eap-badge--<?= $getLevelClass($line['level']) ?> eap-logger-entry__level">
                         <?= strtoupper($line['level']) ?>
                     </span>
                     <?php foreach ($metadata as $meta): ?>
-                    <span class="eap-logger-entry__meta"><?= htmlspecialchars($meta) ?></span>
+                    <span class="eap-logger-entry__meta"><?= esc($meta) ?></span>
                     <?php endforeach; ?>
                 </div>
 
                 <!-- Body -->
                 <div class="eap-logger-entry__body">
                     <?php if (!empty($line['message'])): ?>
-                    <div class="eap-logger-entry__message"><?= htmlspecialchars($line['message']) ?></div>
+                    <div class="eap-logger-entry__message"><?= esc($line['message']) ?></div>
                     <?php endif; ?>
 
                     <?php
@@ -219,7 +219,7 @@ $buildUrl = function ($newPage, $newPerPage = null) use ($filename, $page, $per_
                                 $class .= ' eap-logger-entry__context-line--exception';
                             }
                             ?>
-                        <div class="<?= $class ?>"><?= htmlspecialchars($ctxItem) ?></div>
+                        <div class="<?= $class ?>"><?= esc($ctxItem) ?></div>
                         <?php endforeach; ?>
                     </div>
                     <?php endif; ?>

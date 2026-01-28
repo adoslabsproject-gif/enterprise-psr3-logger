@@ -16,7 +16,7 @@
 
 <!-- Page Header -->
 <div class="eap-page-header">
-    <a href="<?= htmlspecialchars($admin_base_path) ?>/logger" class="eap-btn eap-btn--ghost eap-btn--sm eap-logger-back-link">
+    <a href="<?= esc($admin_base_path) ?>/logger" class="eap-btn eap-btn--ghost eap-btn--sm eap-logger-back-link">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         Back to Logger
     </a>
@@ -33,7 +33,7 @@
                     <span class="eap-card__title">Bot Configuration</span>
                 </div>
                 <div class="eap-card__body">
-                    <form method="POST" action="<?= htmlspecialchars($admin_base_path) ?>/logger/telegram/update" id="telegram-form">
+                    <form method="POST" action="<?= esc($admin_base_path) ?>/logger/telegram/update" id="telegram-form">
                         <?= $csrf_input ?>
 
                         <!-- Enable Toggle -->
@@ -56,7 +56,7 @@
                                     <label class="eap-logger-form-label" for="bot-token">Bot Token *</label>
                                     <div class="eap-input-password-wrapper">
                                         <input type="password" name="bot_token" id="bot-token" class="eap-logger-form-input"
-                                               value="<?= htmlspecialchars($config['bot_token'] ?? '') ?>"
+                                               value="<?= esc($config['bot_token'] ?? '') ?>"
                                                placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz">
                                         <button type="button" class="eap-input-password-toggle" data-target="bot-token" aria-label="Toggle password visibility">
                                             <svg class="eap-icon-eye" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -69,7 +69,7 @@
                                 <div class="eap-logger-form-group">
                                     <label class="eap-logger-form-label" for="chat-id">Chat ID *</label>
                                     <input type="text" name="chat_id" id="chat-id" class="eap-logger-form-input"
-                                           value="<?= htmlspecialchars($config['chat_id'] ?? '') ?>"
+                                           value="<?= esc($config['chat_id'] ?? '') ?>"
                                            placeholder="-1001234567890">
                                     <p class="eap-logger-form-hint">Use <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a> to find your ID</p>
                                 </div>
@@ -102,11 +102,11 @@
                                     <div class="eap-logger-channel-checkboxes" id="channel-list">
                                         <?php foreach ($channels as $key => $ch): ?>
                                         <label class="eap-logger-channel-checkbox <?= in_array('*', $config['channels'] ?? ['*']) ? 'eap-logger-channel-checkbox--disabled' : '' ?>">
-                                            <input type="checkbox" name="channels[]" value="<?= htmlspecialchars($key) ?>"
+                                            <input type="checkbox" name="channels[]" value="<?= esc($key) ?>"
                                                    class="eap-logger-channel-checkbox__input"
                                                    <?= in_array($key, $config['channels'] ?? []) ? 'checked' : '' ?>
                                                    <?= in_array('*', $config['channels'] ?? ['*']) ? 'disabled' : '' ?>>
-                                            <span><?= htmlspecialchars($ch['name'] ?? $key) ?></span>
+                                            <span><?= esc($ch['name'] ?? $key) ?></span>
                                         </label>
                                         <?php endforeach; ?>
                                     </div>
@@ -184,5 +184,5 @@
 </div>
 
 <!-- Hidden data for JavaScript -->
-<input type="hidden" id="logger-admin-base-path" value="<?= htmlspecialchars($admin_base_path) ?>">
-<input type="hidden" id="logger-csrf-token" value="<?= htmlspecialchars($csrf_token ?? '') ?>">
+<input type="hidden" id="logger-admin-base-path" value="<?= esc($admin_base_path) ?>">
+<input type="hidden" id="logger-csrf-token" value="<?= esc($csrf_token ?? '') ?>">

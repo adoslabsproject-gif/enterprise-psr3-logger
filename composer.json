@@ -53,6 +53,7 @@
             "AdosLabs\\EnterprisePSR3Logger\\": "src/"
         },
         "files": [
+            "src/helpers.php",
             "src/Helpers/functions.php",
             "src/Helpers/should_log_stub.php"
         ]
