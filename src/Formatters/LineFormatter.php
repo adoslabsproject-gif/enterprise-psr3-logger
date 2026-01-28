@@ -201,19 +201,44 @@ class LineFormatter extends NormalizerFormatter implements FormatterInterface
     /**
      * Sanitize string to prevent log injection
      *
-     * Removes newlines and ANSI escape sequences that could
-     * confuse log parsers or hide content in terminals.
+     * Comprehensive sanitization to prevent:
+     * - Log forging (fake log entries via newlines)
+     * - Terminal escape sequences (ANSI, VT100)
+     * - Control character injection
+     * - Unicode direction override attacks
+     *
+     * @param string $value The string to sanitize
+     * @return string Sanitized string safe for logging
      */
     private function sanitizeString(string $value): string
     {
-        // Remove ANSI escape sequences
-        $value = preg_replace('/\x1b\[[0-9;]*m/', '', $value) ?? $value;
+        // 1. Remove ANSI escape sequences (colors, cursor movement, etc.)
+        $value = preg_replace('/\x1b\[[0-9;]*[A-Za-z]/', '', $value) ?? $value;
+        $value = preg_replace('/\x1b\][^\x07]*\x07/', '', $value) ?? $value; // OSC sequences
 
-        // Replace newlines with visible marker
+        // 2. Remove other terminal escape sequences (VT100, etc.)
+        $value = preg_replace('/\x1b[PX^_][^\x1b]*\x1b\\\\/', '', $value) ?? $value;
+        $value = preg_replace('/\x1b./', '', $value) ?? $value;
+
+        // 3. Replace newlines with visible marker to prevent log forging
         $value = str_replace(["\r\n", "\r", "\n"], ' ⏎ ', $value);
 
-        // Remove other control characters except tab
+        // 4. Remove null bytes (can truncate strings in some contexts)
+        $value = str_replace("\0", '', $value);
+
+        // 5. Remove other control characters except horizontal tab
+        // Range: 0x00-0x08, 0x0B-0x0C, 0x0E-0x1F, 0x7F
         $value = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $value) ?? $value;
+
+        // 6. Remove Unicode direction override characters (security issue)
+        // LRE, RLE, PDF, LRO, RLO, LRI, RLI, FSI, PDI
+        $value = preg_replace('/[\x{202A}-\x{202E}\x{2066}-\x{2069}]/u', '', $value) ?? $value;
+
+        // 7. Limit length to prevent DoS via excessive log entries
+        $maxLength = 10000;
+        if (strlen($value) > $maxLength) {
+            $value = substr($value, 0, $maxLength) . '...[truncated]';
+        }
 
         return $value;
     }

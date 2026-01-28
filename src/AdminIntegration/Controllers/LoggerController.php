@@ -8,18 +8,25 @@ use AdosLabs\AdminPanel\Controllers\BaseController;
 use AdosLabs\AdminPanel\Database\Pool\DatabasePool;
 use AdosLabs\AdminPanel\Http\Response;
 use AdosLabs\AdminPanel\Services\AuditService;
+use AdosLabs\AdminPanel\Services\EncryptionService;
 use AdosLabs\AdminPanel\Services\SessionService;
 use AdosLabs\EnterprisePSR3Logger\LoggerFacade as Logger;
+use AdosLabs\EnterprisePSR3Logger\Security\RateLimiter;
+use AdosLabs\EnterprisePSR3Logger\Security\SecureErrorHandler;
 use PDO;
 
 /**
  * Logger Admin Controller
  *
- * File-based logging system with:
+ * Enterprise logging administration with:
  * - Daily log files per channel (app-2026-01-27.log)
- * - php_errors.log viewer
- * - Telegram notifications configuration
+ * - php_errors.log viewer (configurable access)
+ * - Telegram notifications (encrypted token storage)
  * - Log file browser with pagination
+ * - Rate limiting on sensitive endpoints
+ * - Secure error handling (no information disclosure)
+ *
+ * @version 2.0.0
  */
 final class LoggerController extends BaseController
 {
@@ -40,9 +47,14 @@ final class LoggerController extends BaseController
     private const DEBUG_LEVELS = ['debug', 'info', 'notice'];
 
     /**
-     * Hours before auto-reset to WARNING
+     * Default hours before auto-reset to WARNING (configurable via LOG_AUTO_RESET_HOURS env)
      */
-    private const AUTO_RESET_HOURS = 8;
+    private const DEFAULT_AUTO_RESET_HOURS = 8;
+
+    /**
+     * Default timezone (configurable via APP_TIMEZONE env)
+     */
+    private const DEFAULT_TIMEZONE = 'UTC';
 
     /**
      * Channel definitions - must match database log_channels table
@@ -135,6 +147,20 @@ final class LoggerController extends BaseController
     private string $logsPath;
     private \PDO $pdo;
     private ?\AdosLabs\AdminPanel\Database\Pool\PooledConnection $pooledConnection = null;
+    private RateLimiter $rateLimiter;
+    private SecureErrorHandler $errorHandler;
+    private ?EncryptionService $encryption = null;
+
+    /**
+     * Whether to allow viewing system log files (php-fpm, etc.)
+     * Configurable via LOG_ALLOW_SYSTEM_LOGS env var (default: false)
+     */
+    private bool $allowSystemLogs;
+
+    /**
+     * Auto-reset hours (configurable)
+     */
+    private int $autoResetHours;
 
     public function __construct(
         DatabasePool $db,
@@ -155,6 +181,27 @@ final class LoggerController extends BaseController
         if (!is_dir($this->logsPath)) {
             @mkdir($this->logsPath, 0o755, true);
         }
+
+        // Initialize security components
+        $this->rateLimiter = new RateLimiter();
+        $this->errorHandler = new SecureErrorHandler();
+
+        // Initialize encryption service (lazy - will throw if APP_KEY not set)
+        try {
+            $this->encryption = new EncryptionService();
+        } catch (\Throwable $e) {
+            // Encryption not available - log and continue
+            // Telegram tokens will be stored unencrypted (legacy mode)
+            $this->encryption = null;
+        }
+
+        // Configuration from environment
+        $this->allowSystemLogs = filter_var(
+            $_ENV['LOG_ALLOW_SYSTEM_LOGS'] ?? getenv('LOG_ALLOW_SYSTEM_LOGS') ?: 'false',
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        $this->autoResetHours = (int) ($_ENV['LOG_AUTO_RESET_HOURS'] ?? getenv('LOG_AUTO_RESET_HOURS') ?: self::DEFAULT_AUTO_RESET_HOURS);
     }
 
     /**
@@ -195,7 +242,7 @@ final class LoggerController extends BaseController
             'today' => $today,
             'logs_path' => $this->logsPath,
             'levels' => array_keys(self::LEVELS),
-            'auto_reset_hours' => self::AUTO_RESET_HOURS,
+            'auto_reset_hours' => $this->autoResetHours,
             'timezone' => date_default_timezone_get(),
             'server_time' => date('Y-m-d H:i:s'),
             'page_title' => 'Logging Dashboard',
@@ -323,8 +370,8 @@ final class LoggerController extends BaseController
             // Calculate auto_reset_at for debug levels ONLY if auto_reset_enabled is true
             $autoResetAt = null;
             if ($autoResetEnabled && in_array($level, self::DEBUG_LEVELS, true) && !$toggleOnly) {
-                // Set auto-reset time: now + AUTO_RESET_HOURS
-                $autoResetAt = date('Y-m-d H:i:s', time() + (self::AUTO_RESET_HOURS * 3600));
+                // Set auto-reset time: now + autoResetHours
+                $autoResetAt = date('Y-m-d H:i:s', time() + ($this->autoResetHours * 3600));
             }
 
             // Update log_channels table
@@ -418,7 +465,9 @@ final class LoggerController extends BaseController
                 'auto_reset_at' => $autoResetAt,
             ]);
         } catch (\Exception $e) {
-            return $this->json(['success' => false, 'message' => 'Failed to update channel: ' . $e->getMessage()]);
+            $error = $this->errorHandler->handle($e, 'channel_update');
+
+            return $this->json(['success' => false, 'message' => $error['message'], 'code' => $error['code']]);
         }
     }
 
@@ -478,7 +527,7 @@ final class LoggerController extends BaseController
                     'channel' => $channel,
                     'old_level' => $oldLevel,
                     'new_level' => 'warning',
-                    'reason' => 'Exceeded ' . self::AUTO_RESET_HOURS . ' hour limit',
+                    'reason' => 'Exceeded ' . $this->autoResetHours . ' hour limit',
                     'action' => 'automatic',
                 ]);
 
@@ -488,7 +537,7 @@ final class LoggerController extends BaseController
                     'channel' => $channel,
                     'old_level' => $oldLevel,
                     'new_level' => 'warning',
-                    'reason' => 'Auto-reset after ' . self::AUTO_RESET_HOURS . ' hours',
+                    'reason' => 'Auto-reset after ' . $this->autoResetHours . ' hours',
                 ]);
 
                 // Invalidate cache
@@ -515,7 +564,7 @@ final class LoggerController extends BaseController
             $timestamp,
             $channel,
             $oldLevel,
-            self::AUTO_RESET_HOURS,
+            $this->autoResetHours,
         );
 
         $securityLogFile = $this->logsPath . '/security-' . date('Y-m-d') . '.log';
@@ -524,25 +573,58 @@ final class LoggerController extends BaseController
 
     /**
      * Invalidate Redis cache for channel configuration
+     *
+     * Supports:
+     * - REDIS_HOST, REDIS_PORT (connection)
+     * - REDIS_PASSWORD (authentication)
+     * - REDIS_TLS (TLS/SSL encryption)
+     * - REDIS_DATABASE (database selection)
      */
     private function invalidateChannelCache(string $channel): void
     {
+        if (!class_exists('Redis')) {
+            return;
+        }
+
         try {
-            // Try to get Redis from container or direct connection
-            $redisHost = $_ENV['REDIS_HOST'] ?? 'localhost';
-            $redisPort = (int) ($_ENV['REDIS_PORT'] ?? 6379);
+            $host = $_ENV['REDIS_HOST'] ?? getenv('REDIS_HOST') ?: 'localhost';
+            $port = (int) ($_ENV['REDIS_PORT'] ?? getenv('REDIS_PORT') ?: 6379);
+            $password = $_ENV['REDIS_PASSWORD'] ?? getenv('REDIS_PASSWORD') ?: null;
+            $useTls = filter_var($_ENV['REDIS_TLS'] ?? getenv('REDIS_TLS') ?: false, FILTER_VALIDATE_BOOLEAN);
+            $database = $_ENV['REDIS_DATABASE'] ?? getenv('REDIS_DATABASE') ?: null;
 
             $redis = new \Redis();
-            if ($redis->connect($redisHost, $redisPort, 0.5)) {
-                // Invalidate specific channel cache
-                $redis->del('eap_log_channel:' . $channel);
-                $redis->del('eap_log_channels_config');
-                // Invalidate any config cache that might include log settings
-                $redis->del('eap_config:logging');
-                $redis->close();
+
+            // TLS connection requires tls:// prefix
+            $connectHost = $useTls ? 'tls://' . $host : $host;
+
+            if (!$redis->connect($connectHost, $port, 1.0)) {
+                return;
             }
+
+            // Authenticate if password is configured
+            if ($password !== null && $password !== '' && $password !== false) {
+                if (!$redis->auth($password)) {
+                    $redis->close();
+
+                    return;
+                }
+            }
+
+            // Select database if specified
+            if ($database !== null && $database !== '' && is_numeric($database)) {
+                $redis->select((int) $database);
+            }
+
+            // Invalidate specific channel cache
+            $redis->del('eap_log_channel:' . $channel);
+            $redis->del('eap_log_channels_config');
+            // Invalidate any config cache that might include log settings
+            $redis->del('eap_config:logging');
+            $redis->close();
         } catch (\Exception $e) {
             // Redis not available, that's ok - config will be read from DB
+            // Don't log here to avoid infinite loops
         }
     }
 
@@ -720,9 +802,24 @@ final class LoggerController extends BaseController
     /**
      * Update Telegram configuration
      * POST /admin/logger/telegram/update
+     *
+     * Security:
+     * - Bot token is encrypted with AES-256-GCM before storage (if APP_KEY is set)
+     * - Rate limited to prevent brute force
      */
     public function updateTelegram(): Response
     {
+        // Rate limiting for sensitive operation
+        $userId = $this->getUser()['id'] ?? 0;
+        $rateCheck = $this->rateLimiter->attempt("telegram_update:{$userId}", 'sensitive');
+        if (!$rateCheck['allowed']) {
+            $message = "Rate limit exceeded. Please wait {$rateCheck['retry_after']} seconds.";
+
+            return $this->isAjax()
+                ? $this->json(['success' => false, 'message' => $message, 'retry_after' => $rateCheck['retry_after']])
+                : $this->error($message);
+        }
+
         $enabled = $this->input('enabled') === '1' || $this->input('enabled') === 'true';
         $botToken = $this->input('bot_token', '');
         $chatId = $this->input('chat_id', '');
@@ -730,14 +827,23 @@ final class LoggerController extends BaseController
         $channels = $this->input('channels', []);
 
         if ($enabled && (empty($botToken) || empty($chatId))) {
-            if ($this->isAjax()) {
-                return $this->json(['success' => false, 'message' => 'Bot token and Chat ID are required']);
-            }
+            $message = 'Bot token and Chat ID are required when Telegram is enabled';
 
-            return $this->error('Bot token and Chat ID are required when Telegram is enabled');
+            return $this->isAjax()
+                ? $this->json(['success' => false, 'message' => $message])
+                : $this->error($message);
         }
 
         try {
+            // Encrypt bot token if encryption is available
+            $storedToken = $botToken;
+            $isEncrypted = false;
+
+            if ($this->encryption !== null && !empty($botToken)) {
+                $storedToken = $this->encryption->encrypt($botToken);
+                $isEncrypted = true;
+            }
+
             $stmt = $this->pdo->prepare('
                 UPDATE log_telegram_config
                 SET enabled = ?,
@@ -745,20 +851,23 @@ final class LoggerController extends BaseController
                     chat_id = ?,
                     min_level = ?,
                     notify_channels = ?,
+                    is_encrypted = ?,
                     updated_at = NOW()
                 WHERE id = 1
             ');
             $stmt->execute([
                 $enabled ? 't' : 'f',
-                $botToken,
+                $storedToken,
                 $chatId,
                 $level,
                 json_encode($channels) ?: '["*"]',
+                $isEncrypted ? 't' : 'f',
             ]);
 
             $this->audit('logger.telegram_updated', [
                 'enabled' => $enabled,
                 'level' => $level,
+                'encrypted' => $isEncrypted,
             ]);
 
             // Log to security channel
@@ -773,11 +882,11 @@ final class LoggerController extends BaseController
 
             return $this->redirect($this->adminUrl('logger/telegram'));
         } catch (\Exception $e) {
-            if ($this->isAjax()) {
-                return $this->json(['success' => false, 'message' => $e->getMessage()]);
-            }
+            $error = $this->errorHandler->handle($e, 'telegram_update');
 
-            return $this->error('Failed to update Telegram config: ' . $e->getMessage());
+            return $this->isAjax()
+                ? $this->json(['success' => false, 'message' => $error['message'], 'code' => $error['code']])
+                : $this->error($error['message']);
         }
     }
 
@@ -810,9 +919,24 @@ final class LoggerController extends BaseController
     /**
      * Test Telegram connection
      * POST /admin/logger/telegram/test
+     *
+     * Security:
+     * - Rate limited (5 requests per 5 minutes)
+     * - Sanitized error messages
      */
     public function testTelegram(): Response
     {
+        // Strict rate limiting for test endpoint
+        $userId = $this->getUser()['id'] ?? 0;
+        $rateCheck = $this->rateLimiter->attempt("telegram_test:{$userId}", 'test');
+        if (!$rateCheck['allowed']) {
+            return $this->json([
+                'success' => false,
+                'message' => "Rate limit exceeded. Please wait {$rateCheck['retry_after']} seconds before testing again.",
+                'retry_after' => $rateCheck['retry_after'],
+            ]);
+        }
+
         $botToken = $this->input('bot_token', '');
         $chatId = $this->input('chat_id', '');
 
@@ -820,21 +944,27 @@ final class LoggerController extends BaseController
             return $this->json(['success' => false, 'message' => 'Bot token and Chat ID are required']);
         }
 
+        // Validate bot token format (basic check)
+        if (!preg_match('/^\d+:[A-Za-z0-9_-]+$/', $botToken)) {
+            return $this->json(['success' => false, 'message' => 'Invalid bot token format']);
+        }
+
         try {
             $message = "🔔 *Test Message*\n\n";
             $message .= "Enterprise Logger connected successfully!\n";
-            $message .= 'Time: ' . date('Y-m-d H:i:s') . "\n";
-            $message .= 'Server: ' . gethostname();
+            $message .= 'Time: ' . date('Y-m-d H:i:s') . ' ' . date_default_timezone_get();
 
             $result = $this->sendTelegramMessage($botToken, $chatId, $message);
 
             if ($result) {
                 return $this->json(['success' => true, 'message' => 'Test message sent successfully']);
-            } else {
-                return $this->json(['success' => false, 'message' => 'Failed to send test message']);
             }
+
+            return $this->json(['success' => false, 'message' => 'Failed to send test message. Please verify your bot token and chat ID.']);
         } catch (\Exception $e) {
-            return $this->json(['success' => false, 'message' => 'Telegram error: ' . $e->getMessage()]);
+            $error = $this->errorHandler->handle($e, 'telegram_test');
+
+            return $this->json(['success' => false, 'message' => $error['message'], 'code' => $error['code']]);
         }
     }
 
@@ -940,16 +1070,20 @@ final class LoggerController extends BaseController
 
     /**
      * Add system log files (PHP error log, php-fpm logs) to the file list
+     *
+     * Access to system logs is controlled by LOG_ALLOW_SYSTEM_LOGS env var (default: false)
+     * This prevents information disclosure from other applications on shared servers.
      */
     private function addSystemLogFiles(array &$files): void
     {
-        // PHP error log from ini_get
+        // PHP error log from ini_get (always allowed - it's the app's error log)
         $phpErrorLog = ini_get('error_log');
         if ($phpErrorLog && file_exists($phpErrorLog) && is_readable($phpErrorLog)) {
             // Check if not already in list
             $alreadyListed = false;
             foreach ($files as $f) {
-                if (realpath($this->logsPath . '/' . $f['name']) === realpath($phpErrorLog)) {
+                $existingPath = $this->logsPath . '/' . $f['name'];
+                if (file_exists($existingPath) && realpath($existingPath) === realpath($phpErrorLog)) {
                     $alreadyListed = true;
                     break;
                 }
@@ -972,16 +1106,16 @@ final class LoggerController extends BaseController
             }
         }
 
+        // System logs (php-fpm, etc.) - only if explicitly enabled
+        if (!$this->allowSystemLogs) {
+            return;
+        }
+
         // Common php-fpm log locations
         $phpFpmPaths = [
             '/var/log/php-fpm/error.log',
             '/var/log/php-fpm/www-error.log',
-            '/var/log/php-fpm/access.log',
-            '/var/log/php-fpm/www-access.log',
             '/var/log/php-fpm.log',
-            '/var/log/php7.4-fpm.log',
-            '/var/log/php8.0-fpm.log',
-            '/var/log/php8.1-fpm.log',
             '/var/log/php8.2-fpm.log',
             '/var/log/php8.3-fpm.log',
             '/usr/local/var/log/php-fpm.log',
@@ -1273,9 +1407,21 @@ final class LoggerController extends BaseController
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
 
             if ($row) {
+                $botToken = $row['bot_token'] ?? '';
+
+                // Decrypt token if it was encrypted
+                $isEncrypted = ($row['is_encrypted'] ?? false) === true
+                    || ($row['is_encrypted'] ?? '') === 't'
+                    || ($row['is_encrypted'] ?? '') === '1';
+
+                if ($isEncrypted && $this->encryption !== null && !empty($botToken)) {
+                    $decrypted = $this->encryption->decrypt($botToken);
+                    $botToken = $decrypted ?? $botToken; // Fallback to encrypted if decryption fails
+                }
+
                 return [
                     'enabled' => (bool) $row['enabled'],
-                    'bot_token' => $row['bot_token'] ?? '',
+                    'bot_token' => $botToken,
                     'chat_id' => $row['chat_id'] ?? '',
                     'level' => $row['min_level'] ?? 'error',
                     'channels' => json_decode($row['notify_channels'] ?? '["*"]', true) ?? ['*'],
@@ -1337,19 +1483,38 @@ final class LoggerController extends BaseController
 
     /**
      * Validate log filename for security
+     *
+     * Strict validation to prevent path traversal and unauthorized file access.
+     * Only allows specific, known-safe filename patterns.
      */
     private function isValidLogFilename(string $filename): bool
     {
-        // Allowed formats:
-        // - channel-YYYY-MM-DD.log (e.g., security-2026-01-28.log)
-        // - php_errors.log, php-errors.log, php_error.log
-        // - php-fpm*.log
-        // - error.log, access.log (system logs)
+        // Reject empty, too long, or containing path separators
+        if (empty($filename) || strlen($filename) > 100 || str_contains($filename, '/') || str_contains($filename, '\\')) {
+            return false;
+        }
+
+        // Reject null bytes and other dangerous characters
+        if (str_contains($filename, "\0") || str_contains($filename, '..')) {
+            return false;
+        }
+
+        // Whitelist of valid filename patterns (no wildcards for security)
         $validPatterns = [
-            '/^[a-z_]+-\d{4}-\d{2}-\d{2}\.log$/',  // channel-date.log
-            '/^php[_-]?errors?\.log$/i',            // php_errors.log, php-error.log, phperrors.log
-            '/^php-fpm.*\.log$/i',                  // php-fpm*.log
-            '/^(error|access|www-error|www-access)\.log$/i',  // system logs
+            // Application log files: channel-YYYY-MM-DD.log
+            '/^[a-z_]+-\d{4}-\d{2}-\d{2}\.log$/',
+
+            // PHP error logs: php_errors.log, php-errors.log, php_error.log
+            '/^php[_-]?errors?\.log$/i',
+
+            // PHP-FPM logs: explicit patterns only (no wildcards)
+            '/^php-fpm\.log$/i',
+            '/^php-fpm-error\.log$/i',
+            '/^php8\.[0-3]-fpm\.log$/i',
+            '/^www-error\.log$/i',
+
+            // System error/access logs
+            '/^(error|access)\.log$/i',
         ];
 
         foreach ($validPatterns as $pattern) {
@@ -1404,27 +1569,27 @@ final class LoggerController extends BaseController
      * Priority:
      * 1. APP_TIMEZONE environment variable
      * 2. date.timezone from php.ini
-     * 3. Default to Europe/Rome
+     * 3. Default to UTC (international standard)
      */
     private function ensureTimezone(): void
     {
         $timezone = $_ENV['APP_TIMEZONE'] ?? getenv('APP_TIMEZONE') ?: null;
 
-        if ($timezone === null) {
+        if ($timezone === null || $timezone === '' || $timezone === false) {
             $iniTimezone = ini_get('date.timezone');
-            if ($iniTimezone) {
+            if ($iniTimezone && $iniTimezone !== '') {
                 $timezone = $iniTimezone;
             }
         }
 
-        if ($timezone === null) {
-            $timezone = 'Europe/Rome';
+        if ($timezone === null || $timezone === '' || $timezone === false) {
+            $timezone = self::DEFAULT_TIMEZONE;
         }
 
         try {
             date_default_timezone_set($timezone);
         } catch (\Throwable $e) {
-            date_default_timezone_set('Europe/Rome');
+            date_default_timezone_set(self::DEFAULT_TIMEZONE);
         }
     }
 }

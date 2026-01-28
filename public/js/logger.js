@@ -6,8 +6,10 @@
  * - Level selector with explicit Save button
  * - Auto-reset countdown timer for debug levels
  * - STATELESS CSRF: Token remains valid for 60 minutes
+ * - Secure JSON response validation
  *
  * CSP-compliant - external script file
+ * @version 2.0.0
  */
 (function() {
     'use strict';
@@ -25,6 +27,52 @@
     var adminBasePath = adminBasePathEl.value;
     var csrfToken = csrfTokenEl ? csrfTokenEl.value : '';
     var autoResetHours = autoResetHoursEl ? parseInt(autoResetHoursEl.value, 10) : 8;
+
+    /**
+     * Safe JSON response parser with Content-Type validation
+     *
+     * @param {Response} response - Fetch Response object
+     * @returns {Promise<Object>} Parsed JSON or error object
+     */
+    function parseJsonResponse(response) {
+        var contentType = response.headers.get('content-type') || '';
+
+        // Validate Content-Type is JSON
+        if (!contentType.includes('application/json')) {
+            // Non-JSON response - might be an error page
+            return response.text().then(function(text) {
+                // Check if response looks like HTML error page
+                if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+                    throw new Error('Server returned an error page. Please refresh and try again.');
+                }
+                throw new Error('Invalid response format from server');
+            });
+        }
+
+        return response.json().catch(function(e) {
+            throw new Error('Invalid JSON response: ' + e.message);
+        });
+    }
+
+    /**
+     * Make a secure POST request with CSRF token
+     *
+     * @param {string} url - Endpoint URL
+     * @param {string} body - URL-encoded body
+     * @returns {Promise<Object>} Parsed JSON response
+     */
+    function securePost(url, body) {
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-Token': csrfToken,
+                'Accept': 'application/json'
+            },
+            body: body
+        }).then(parseJsonResponse);
+    }
 
     // Debug levels that trigger auto-reset
     var debugLevels = ['debug', 'info', 'notice'];
@@ -61,20 +109,13 @@
      * Save auto-reset toggle change (instant)
      */
     function saveAutoResetToggle(channel, enabled, level, autoResetEnabled, card) {
-        fetch(adminBasePath + '/logger/channel/update', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-Token': csrfToken
-            },
-            body: '_csrf_token=' + encodeURIComponent(csrfToken) +
-                  '&channel=' + encodeURIComponent(channel) +
-                  '&enabled=' + (enabled ? '1' : '0') +
-                  '&level=' + encodeURIComponent(level) +
-                  '&auto_reset_enabled=' + (autoResetEnabled ? '1' : '0')
-        })
-        .then(function(r) { return r.json(); })
+        securePost(adminBasePath + '/logger/channel/update',
+            '_csrf_token=' + encodeURIComponent(csrfToken) +
+            '&channel=' + encodeURIComponent(channel) +
+            '&enabled=' + (enabled ? '1' : '0') +
+            '&level=' + encodeURIComponent(level) +
+            '&auto_reset_enabled=' + (autoResetEnabled ? '1' : '0')
+        )
         .then(function(data) {
             if (data.success) {
                 var message = autoResetEnabled ? 'Auto-reset enabled' : 'Auto-reset disabled';
@@ -173,20 +214,13 @@
      * Save channel toggle (enable/disable) - instant
      */
     function saveChannelToggle(channel, enabled, level) {
-        fetch(adminBasePath + '/logger/channel/update', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-Token': csrfToken
-            },
-            body: '_csrf_token=' + encodeURIComponent(csrfToken) +
-                  '&channel=' + encodeURIComponent(channel) +
-                  '&enabled=' + (enabled ? '1' : '0') +
-                  '&level=' + encodeURIComponent(level) +
-                  '&toggle_only=1'
-        })
-        .then(function(r) { return r.json(); })
+        securePost(adminBasePath + '/logger/channel/update',
+            '_csrf_token=' + encodeURIComponent(csrfToken) +
+            '&channel=' + encodeURIComponent(channel) +
+            '&enabled=' + (enabled ? '1' : '0') +
+            '&level=' + encodeURIComponent(level) +
+            '&toggle_only=1'
+        )
         .then(function(data) {
             showToast(
                 data.success ? 'Channel ' + (enabled ? 'enabled' : 'disabled') : 'Error: ' + (data.message || 'Failed'),
@@ -206,20 +240,13 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="eap-spinner"></span> Saving...';
 
-        fetch(adminBasePath + '/logger/channel/update', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-Token': csrfToken
-            },
-            body: '_csrf_token=' + encodeURIComponent(csrfToken) +
-                  '&channel=' + encodeURIComponent(channel) +
-                  '&enabled=' + (enabled ? '1' : '0') +
-                  '&level=' + encodeURIComponent(level) +
-                  '&auto_reset_enabled=' + (autoResetEnabled ? '1' : '0')
-        })
-        .then(function(r) { return r.json(); })
+        securePost(adminBasePath + '/logger/channel/update',
+            '_csrf_token=' + encodeURIComponent(csrfToken) +
+            '&channel=' + encodeURIComponent(channel) +
+            '&enabled=' + (enabled ? '1' : '0') +
+            '&level=' + encodeURIComponent(level) +
+            '&auto_reset_enabled=' + (autoResetEnabled ? '1' : '0')
+        )
         .then(function(data) {
             if (data.success) {
                 // Update original value
@@ -332,17 +359,10 @@
                 var filename = this.dataset.file;
                 if (!confirm('Clear all contents of "' + filename + '"?')) return;
 
-                fetch(adminBasePath + '/logger/file/clear', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'X-CSRF-Token': csrfToken
-                    },
-                    body: '_csrf_token=' + encodeURIComponent(csrfToken) +
-                          '&file=' + encodeURIComponent(filename)
-                })
-                .then(function(r) { return r.json(); })
+                securePost(adminBasePath + '/logger/file/clear',
+                    '_csrf_token=' + encodeURIComponent(csrfToken) +
+                    '&file=' + encodeURIComponent(filename)
+                )
                 .then(function(data) {
                     showToast(
                         data.success ? 'File cleared' : 'Error: ' + (data.message || 'Failed'),
@@ -499,17 +519,11 @@
                 testBtn.disabled = true;
                 testBtn.textContent = 'Testing...';
 
-                var formData = new FormData();
-                formData.append('_csrf_token', csrfToken);
-                formData.append('bot_token', botToken.value);
-                formData.append('chat_id', chatId.value);
-
-                fetch(adminBasePath + '/logger/telegram/test', {
-                    method: 'POST',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                    body: formData
-                })
-                .then(function(r) { return r.json(); })
+                securePost(adminBasePath + '/logger/telegram/test',
+                    '_csrf_token=' + encodeURIComponent(csrfToken) +
+                    '&bot_token=' + encodeURIComponent(botToken.value) +
+                    '&chat_id=' + encodeURIComponent(chatId.value)
+                )
                 .then(function(data) {
                     showTestResult(data.success, data.message || (data.success ? 'Test message sent!' : 'Failed'));
                 })
@@ -649,17 +663,10 @@
                 var errors = 0;
 
                 files.forEach(function(file) {
-                    fetch(adminBasePath + '/logger/file/clear', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRF-Token': csrfToken
-                        },
-                        body: '_csrf_token=' + encodeURIComponent(csrfToken) +
-                              '&file=' + encodeURIComponent(file)
-                    })
-                    .then(function(r) { return r.json(); })
+                    securePost(adminBasePath + '/logger/file/clear',
+                        '_csrf_token=' + encodeURIComponent(csrfToken) +
+                        '&file=' + encodeURIComponent(file)
+                    )
                     .then(function(data) {
                         if (data.success) {
                             cleared++;
@@ -697,17 +704,10 @@
                 var errors = 0;
 
                 files.forEach(function(file) {
-                    fetch(adminBasePath + '/logger/file/delete', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRF-Token': csrfToken
-                        },
-                        body: '_csrf_token=' + encodeURIComponent(csrfToken) +
-                              '&file=' + encodeURIComponent(file)
-                    })
-                    .then(function(r) { return r.json(); })
+                    securePost(adminBasePath + '/logger/file/delete',
+                        '_csrf_token=' + encodeURIComponent(csrfToken) +
+                        '&file=' + encodeURIComponent(file)
+                    )
                     .then(function(data) {
                         if (data.success) {
                             deleted++;
