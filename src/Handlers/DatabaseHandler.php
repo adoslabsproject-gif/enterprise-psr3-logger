@@ -424,8 +424,20 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
 
         $whereClause = empty($where) ? '' : 'WHERE ' . implode(' AND ', $where);
         $order = ($filters['order'] ?? 'desc') === 'asc' ? 'ASC' : 'DESC';
-        $limit = isset($filters['limit']) ? 'LIMIT ' . (int) $filters['limit'] : '';
-        $offset = isset($filters['offset']) ? 'OFFSET ' . (int) $filters['offset'] : '';
+
+        // SECURITY: Validate and bound LIMIT/OFFSET to prevent abuse
+        // Max 10000 records per query, offset must be non-negative
+        $limit = '';
+        if (isset($filters['limit'])) {
+            $limitVal = max(0, min(10000, (int) $filters['limit']));
+            $limit = 'LIMIT ' . $limitVal;
+        }
+
+        $offset = '';
+        if (isset($filters['offset'])) {
+            $offsetVal = max(0, (int) $filters['offset']);
+            $offset = 'OFFSET ' . $offsetVal;
+        }
 
         $sql = "SELECT * FROM {$table} {$whereClause} ORDER BY created_at {$order} {$limit} {$offset}";
 

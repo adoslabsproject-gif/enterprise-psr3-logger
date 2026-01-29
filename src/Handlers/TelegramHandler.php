@@ -191,9 +191,57 @@ final class TelegramHandler extends AbstractProcessingHandler
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
         curl_close($ch);
 
-        return $response !== false && $httpCode === 200;
+        // CURL error
+        if ($response === false) {
+            error_log('TelegramHandler: CURL failed - ' . $curlError);
+            return false;
+        }
+
+        // HTTP error
+        if ($httpCode !== 200) {
+            // Parse Telegram API error response for better debugging
+            $errorDescription = $this->parseTelegramError($response);
+            error_log("TelegramHandler: HTTP {$httpCode} - {$errorDescription}");
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Parse Telegram API error response
+     *
+     * Telegram API returns JSON with 'ok', 'error_code', and 'description' fields.
+     * Example: {"ok":false,"error_code":400,"description":"Bad Request: chat not found"}
+     */
+    private function parseTelegramError(string $response): string
+    {
+        if ($response === '') {
+            return 'Empty response';
+        }
+
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            // Not JSON - return truncated raw response
+            return 'Non-JSON response: ' . substr($response, 0, 100);
+        }
+
+        // Standard Telegram error format
+        if (isset($data['description'])) {
+            $desc = (string) $data['description'];
+            // Sanitize for log safety (no newlines, reasonable length)
+            return preg_replace('/[\r\n]+/', ' ', substr($desc, 0, 200)) ?? 'Unknown error';
+        }
+
+        // Fallback: return ok status
+        if (isset($data['ok']) && $data['ok'] === false) {
+            return 'API returned ok=false (no description)';
+        }
+
+        return 'Unknown error format';
     }
 
     /**

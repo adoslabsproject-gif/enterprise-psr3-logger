@@ -485,7 +485,14 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
     }
 
     /**
-     * Clean up old log files
+     * Clean up old log files with file locking
+     *
+     * MULTI-PROCESS SAFETY:
+     * Uses a dedicated cleanup lock file to prevent race conditions when
+     * multiple processes try to clean up simultaneously. This prevents:
+     * 1. Multiple processes deleting the same file
+     * 2. Race between glob() and unlink()
+     * 3. File count miscalculation due to concurrent deletions
      *
      * Note: This matches both .log and .log.gz files. If compression is enabled,
      * maxFiles applies to the total number of files (logs + compressed).
@@ -498,21 +505,53 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
         $dir = $info['dirname'] ?? '.';
         $basename = $info['filename'] ?? 'app';
 
-        // Find matching files (both .log and .log.gz)
-        $pattern = "{$dir}/{$basename}-*";
-        $files = glob($pattern);
+        // Use dedicated cleanup lock file (separate from rotation lock)
+        $cleanupLockFile = $this->baseDir . '/.cleanup.lock';
+        $lockHandle = @fopen($cleanupLockFile, 'c');
 
-        if ($files === false || count($files) <= $this->maxFiles) {
+        if ($lockHandle === false) {
+            // Cannot acquire lock file - skip cleanup this time
             return;
         }
 
-        // Sort by modification time (oldest first)
-        usort($files, fn ($a, $b) => filemtime($a) <=> filemtime($b));
+        // Try non-blocking lock first - if another process is cleaning, skip
+        if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
+            fclose($lockHandle);
+            return;
+        }
 
-        // Delete oldest files
-        $toDelete = count($files) - $this->maxFiles;
-        for ($i = 0; $i < $toDelete; $i++) {
-            @unlink($files[$i]);
+        try {
+            // Re-check file count AFTER acquiring lock (double-check pattern)
+            $pattern = "{$dir}/{$basename}-*";
+            $files = glob($pattern);
+
+            if ($files === false || count($files) <= $this->maxFiles) {
+                return;
+            }
+
+            // Sort by modification time (oldest first)
+            // Use @ to suppress warnings if file was deleted between glob and filemtime
+            usort($files, function ($a, $b) {
+                $timeA = @filemtime($a);
+                $timeB = @filemtime($b);
+                // Deleted files (false) sort first (will be skipped in deletion)
+                if ($timeA === false) return -1;
+                if ($timeB === false) return 1;
+                return $timeA <=> $timeB;
+            });
+
+            // Delete oldest files
+            $toDelete = count($files) - $this->maxFiles;
+            $deleted = 0;
+            for ($i = 0; $i < count($files) && $deleted < $toDelete; $i++) {
+                // Check file still exists before unlinking (TOCTOU mitigation)
+                if (file_exists($files[$i]) && @unlink($files[$i])) {
+                    $deleted++;
+                }
+            }
+        } finally {
+            flock($lockHandle, LOCK_UN);
+            fclose($lockHandle);
         }
     }
 
