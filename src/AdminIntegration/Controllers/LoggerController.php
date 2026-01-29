@@ -210,7 +210,7 @@ final class LoggerController extends BaseController
             error_log(
                 '[EnterprisePSR3Logger] SECURITY WARNING: Encryption unavailable - ' .
                 'Telegram bot tokens will be stored in plaintext. Set APP_KEY environment variable ' .
-                'for AES-256-GCM encryption. Error: ' . $e->getMessage()
+                'for AES-256-GCM encryption. Error: ' . $e->getMessage(),
             );
             $this->encryption = null;
         }
@@ -577,7 +577,7 @@ final class LoggerController extends BaseController
                 '[EnterprisePSR3Logger] processAutoResets failed: %s in %s:%d',
                 $e->getMessage(),
                 $e->getFile(),
-                $e->getLine()
+                $e->getLine(),
             ));
         }
     }
@@ -2078,6 +2078,7 @@ final class LoggerController extends BaseController
 
         if (is_string($value)) {
             $lower = strtolower($value);
+
             return in_array($lower, ['t', 'true', '1', 'yes', 'on'], true);
         }
 

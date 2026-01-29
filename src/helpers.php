@@ -8,7 +8,6 @@ declare(strict_types=1);
  * Security-focused helper functions for the logging package.
  * Auto-loaded via composer.json "files" autoload.
  */
-
 if (!function_exists('esc')) {
     /**
      * Escape string for safe HTML output (XSS prevention)
