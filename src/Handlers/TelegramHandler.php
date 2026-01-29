@@ -197,6 +197,7 @@ final class TelegramHandler extends AbstractProcessingHandler
         // CURL error
         if ($response === false) {
             error_log('TelegramHandler: CURL failed - ' . $curlError);
+
             return false;
         }
 
@@ -205,6 +206,7 @@ final class TelegramHandler extends AbstractProcessingHandler
             // Parse Telegram API error response for better debugging
             $errorDescription = $this->parseTelegramError($response);
             error_log("TelegramHandler: HTTP {$httpCode} - {$errorDescription}");
+
             return false;
         }
 
@@ -232,6 +234,7 @@ final class TelegramHandler extends AbstractProcessingHandler
         // Standard Telegram error format
         if (isset($data['description'])) {
             $desc = (string) $data['description'];
+
             // Sanitize for log safety (no newlines, reasonable length)
             return preg_replace('/[\r\n]+/', ' ', substr($desc, 0, 200)) ?? 'Unknown error';
         }

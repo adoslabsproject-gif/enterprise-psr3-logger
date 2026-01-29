@@ -517,6 +517,7 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
         // Try non-blocking lock first - if another process is cleaning, skip
         if (!flock($lockHandle, LOCK_EX | LOCK_NB)) {
             fclose($lockHandle);
+
             return;
         }
 
@@ -535,8 +536,13 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
                 $timeA = @filemtime($a);
                 $timeB = @filemtime($b);
                 // Deleted files (false) sort first (will be skipped in deletion)
-                if ($timeA === false) return -1;
-                if ($timeB === false) return 1;
+                if ($timeA === false) {
+                    return -1;
+                }
+                if ($timeB === false) {
+                    return 1;
+                }
+
                 return $timeA <=> $timeB;
             });
 

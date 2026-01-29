@@ -134,6 +134,7 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
                     'Webhook URL uses internal/private IPv6 address (SSRF protection)',
                 );
             }
+
             return; // Valid external IPv6
         }
 
