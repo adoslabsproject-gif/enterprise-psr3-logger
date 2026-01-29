@@ -77,6 +77,13 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
     private bool $useBatching;
 
     /**
+     * Maximum records per single INSERT statement
+     * MySQL has 65535 max placeholders, with 8 columns per record = max ~8000 records
+     * We use 1000 as safe limit for all databases
+     */
+    private const MAX_RECORDS_PER_INSERT = 1000;
+
+    /**
      * @param PDO $pdo PDO connection
      * @param string $table Table name
      * @param Level $level Minimum log level
@@ -121,9 +128,10 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
     }
 
     /**
-     * Flush buffered records to database using multi-row INSERT
+     * Flush buffered records to database using chunked multi-row INSERT
      *
-     * Uses a single INSERT statement with multiple value sets for better performance.
+     * Uses multiple INSERT statements with chunks of MAX_RECORDS_PER_INSERT
+     * to avoid database placeholder limits (MySQL: 65535, PostgreSQL: similar).
      * Falls back to individual inserts if multi-row fails.
      */
     public function flush(): void
@@ -132,48 +140,24 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
             return;
         }
 
-        $count = count($this->buffer);
+        $totalCount = count($this->buffer);
 
         try {
             $this->pdo->beginTransaction();
 
-            // Build multi-row INSERT for better performance
-            // Each row has 8 columns: channel, level, level_value, message, context, extra, created_at, request_id
-            $placeholders = [];
-            $values = [];
-            $paramIndex = 0;
+            // Process in chunks to avoid placeholder limits
+            $chunks = array_chunk($this->buffer, self::MAX_RECORDS_PER_INSERT);
 
-            foreach ($this->buffer as $record) {
-                $requestId = $record->extra['request_id'] ?? $record->context['request_id'] ?? null;
-
-                $placeholders[] = '(:channel' . $paramIndex . ', :level' . $paramIndex . ', :level_value' . $paramIndex .
-                    ', :message' . $paramIndex . ', :context' . $paramIndex . ', :extra' . $paramIndex .
-                    ', :created_at' . $paramIndex . ', :request_id' . $paramIndex . ')';
-
-                $values[':channel' . $paramIndex] = $record->channel;
-                $values[':level' . $paramIndex] = $record->level->name;
-                $values[':level_value' . $paramIndex] = $record->level->value;
-                $values[':message' . $paramIndex] = $record->message;
-                $values[':context' . $paramIndex] = json_encode($record->context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                $values[':extra' . $paramIndex] = json_encode($record->extra, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-                $values[':created_at' . $paramIndex] = $record->datetime->format('Y-m-d H:i:s.u');
-                $values[':request_id' . $paramIndex] = $requestId;
-
-                $paramIndex++;
+            foreach ($chunks as $chunk) {
+                $this->insertChunk($chunk);
             }
-
-            $sql = "INSERT INTO {$this->table} (channel, level, level_value, message, context, extra, created_at, request_id) VALUES " .
-                implode(', ', $placeholders);
-
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($values);
 
             $this->pdo->commit();
         } catch (PDOException $e) {
             $this->pdo->rollBack();
-            error_log('DatabaseHandler: Multi-row batch insert failed (' . $count . ' records) - ' . $e->getMessage());
+            error_log('DatabaseHandler: Chunked batch insert failed (' . $totalCount . ' records) - ' . $e->getMessage());
 
-            // Fallback: try individual inserts (some DBs have placeholder limits)
+            // Fallback: try individual inserts
             try {
                 $this->pdo->beginTransaction();
                 foreach ($this->buffer as $record) {
@@ -187,6 +171,49 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
         }
 
         $this->buffer = [];
+    }
+
+    /**
+     * Insert a chunk of records using multi-row INSERT
+     *
+     * @param array<LogRecord> $chunk Records to insert (max MAX_RECORDS_PER_INSERT)
+     */
+    private function insertChunk(array $chunk): void
+    {
+        if (empty($chunk)) {
+            return;
+        }
+
+        // Build multi-row INSERT for better performance
+        // Each row has 8 columns: channel, level, level_value, message, context, extra, created_at, request_id
+        $placeholders = [];
+        $values = [];
+        $paramIndex = 0;
+
+        foreach ($chunk as $record) {
+            $requestId = $record->extra['request_id'] ?? $record->context['request_id'] ?? null;
+
+            $placeholders[] = '(:channel' . $paramIndex . ', :level' . $paramIndex . ', :level_value' . $paramIndex .
+                ', :message' . $paramIndex . ', :context' . $paramIndex . ', :extra' . $paramIndex .
+                ', :created_at' . $paramIndex . ', :request_id' . $paramIndex . ')';
+
+            $values[':channel' . $paramIndex] = $record->channel;
+            $values[':level' . $paramIndex] = $record->level->name;
+            $values[':level_value' . $paramIndex] = $record->level->value;
+            $values[':message' . $paramIndex] = $record->message;
+            $values[':context' . $paramIndex] = json_encode($record->context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $values[':extra' . $paramIndex] = json_encode($record->extra, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $values[':created_at' . $paramIndex] = $record->datetime->format('Y-m-d H:i:s.u');
+            $values[':request_id' . $paramIndex] = $requestId;
+
+            $paramIndex++;
+        }
+
+        $sql = "INSERT INTO {$this->table} (channel, level, level_value, message, context, extra, created_at, request_id) VALUES " .
+            implode(', ', $placeholders);
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($values);
     }
 
     /**

@@ -82,7 +82,10 @@ final class RateLimiter
     }
 
     /**
-     * Combined check and hit - most common use case
+     * Combined check and hit - ATOMIC operation using Lua script
+     *
+     * This is the recommended method for rate limiting as it's atomic:
+     * no race condition between check and hit.
      *
      * @param string $key Unique identifier
      * @param string $category Rate limit category
@@ -90,6 +93,18 @@ final class RateLimiter
      */
     public function attempt(string $key, string $category = 'default'): array
     {
+        $limits = self::DEFAULT_LIMITS[$category] ?? self::DEFAULT_LIMITS['default'];
+        $maxRequests = $limits['requests'];
+        $windowSeconds = $limits['window'];
+
+        $fullKey = $this->prefix . $key;
+        $now = time();
+
+        if ($this->redis !== null) {
+            return $this->attemptRedisAtomic($fullKey, $maxRequests, $windowSeconds, $now);
+        }
+
+        // Fallback to non-atomic local check+hit
         $result = $this->check($key, $category);
 
         if ($result['allowed']) {
@@ -98,6 +113,90 @@ final class RateLimiter
         }
 
         return $result;
+    }
+
+    /**
+     * Atomic check+hit using Redis Lua script
+     *
+     * This eliminates the race condition between check() and hit().
+     * The entire operation is atomic - no other client can modify the key
+     * between checking and incrementing.
+     *
+     * @return array{allowed: bool, remaining: int, reset_at: int, retry_after: int|null}
+     */
+    private function attemptRedisAtomic(string $key, int $maxRequests, int $windowSeconds, int $now): array
+    {
+        $redis = $this->redis;
+        if ($redis === null) {
+            // This shouldn't happen, but fallback just in case
+            return ['allowed' => true, 'remaining' => $maxRequests, 'reset_at' => $now + $windowSeconds, 'retry_after' => null];
+        }
+
+        $windowStart = $now - $windowSeconds;
+
+        // Lua script for atomic sliding window rate limiting
+        // KEYS[1] = rate limit key
+        // ARGV[1] = window start timestamp
+        // ARGV[2] = current timestamp
+        // ARGV[3] = max requests
+        // ARGV[4] = window seconds (for expire)
+        // ARGV[5] = unique member suffix
+        $luaScript = <<<'LUA'
+                        -- Remove expired entries
+                        redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+
+                        -- Count current entries
+                        local count = redis.call('ZCARD', KEYS[1])
+                        local maxRequests = tonumber(ARGV[3])
+                        local now = tonumber(ARGV[2])
+                        local windowSeconds = tonumber(ARGV[4])
+
+                        if count < maxRequests then
+                            -- Allowed: add new entry with unique suffix to prevent collision
+                            redis.call('ZADD', KEYS[1], now, ARGV[2] .. '.' .. ARGV[5])
+                            redis.call('EXPIRE', KEYS[1], windowSeconds + 1)
+                            return {1, maxRequests - count - 1, 0}
+                        else
+                            -- Denied: get oldest entry for retry_after calculation
+                            local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
+                            local retryAfter = 0
+                            if oldest and oldest[2] then
+                                retryAfter = tonumber(oldest[2]) + windowSeconds - now
+                                if retryAfter < 1 then retryAfter = 1 end
+                            end
+                            return {0, 0, retryAfter}
+                        end
+            LUA;
+
+        try {
+            $uniqueSuffix = bin2hex(random_bytes(8));
+            $result = $redis->eval(
+                $luaScript,
+                [$key, (string) $windowStart, (string) $now, (string) $maxRequests, (string) $windowSeconds, $uniqueSuffix],
+                1,
+            );
+
+            if (is_array($result) && count($result) === 3) {
+                return [
+                    'allowed' => (bool) $result[0],
+                    'remaining' => (int) $result[1],
+                    'reset_at' => $now + $windowSeconds,
+                    'retry_after' => $result[2] > 0 ? (int) $result[2] : null,
+                ];
+            }
+        } catch (\Throwable $e) {
+            // Lua script failed, fallback to non-atomic
+            error_log('RateLimiter: Lua script failed, using non-atomic fallback - ' . $e->getMessage());
+        }
+
+        // Fallback to non-atomic if Lua fails
+        $checkResult = $this->checkRedis($key, $maxRequests, $windowSeconds, $now, $windowStart);
+        if ($checkResult['allowed']) {
+            $this->hitRedis($key, $windowSeconds, $now);
+            $checkResult['remaining']--;
+        }
+
+        return $checkResult;
     }
 
     /**

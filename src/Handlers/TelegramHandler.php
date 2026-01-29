@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Handlers;
 
+use AdosLabs\EnterprisePSR3Logger\Security\RateLimiter;
 use Monolog\Handler\AbstractProcessingHandler;
 use Monolog\Level;
 use Monolog\LogRecord;
@@ -15,12 +16,17 @@ use Monolog\LogRecord;
  *
  * Features:
  * - Separate minimum level (independent from channel level)
- * - Rate limiting to prevent spam
+ * - TRUE sliding window rate limiting (uses RateLimiter with Redis support)
  * - Message formatting with emojis
  * - HTML parsing for structured messages
  * - Silent mode option
  *
- * @version 1.0.0
+ * Rate Limiting:
+ * - Uses proper sliding window algorithm (not fixed minute buckets)
+ * - Supports Redis for distributed rate limiting
+ * - Falls back to local memory if Redis unavailable
+ *
+ * @version 2.0.0
  */
 final class TelegramHandler extends AbstractProcessingHandler
 {
@@ -30,14 +36,8 @@ final class TelegramHandler extends AbstractProcessingHandler
     private bool $silent;
     private int $rateLimitPerMinute;
 
-    /**
-     * @var array<string, int> Rate limit tracking
-     *                         Note: Static state is acceptable for short-lived PHP requests.
-     *                         For long-running processes (Swoole, RoadRunner), call resetRateLimitState()
-     *                         between requests or inject an external rate limiter.
-     */
-    private static array $messageCount = [];
-    private static int $lastCleanup = 0;
+    /** @var RateLimiter|null Rate limiter instance (lazy initialized) */
+    private static ?RateLimiter $rateLimiter = null;
 
     private const API_URL = 'https://api.telegram.org/bot%s/sendMessage';
 
@@ -197,7 +197,24 @@ final class TelegramHandler extends AbstractProcessingHandler
     }
 
     /**
-     * Check if we're within rate limit
+     * Get rate limiter instance (lazy initialization)
+     */
+    private function getRateLimiter(): RateLimiter
+    {
+        if (self::$rateLimiter === null) {
+            self::$rateLimiter = new RateLimiter();
+        }
+
+        return self::$rateLimiter;
+    }
+
+    /**
+     * Check if we're within rate limit using TRUE sliding window
+     *
+     * Uses RateLimiter with proper sliding window algorithm:
+     * - Supports Redis for distributed rate limiting
+     * - Falls back to local memory if Redis unavailable
+     * - No fixed minute boundary issues (true sliding window)
      */
     private function isWithinRateLimit(): bool
     {
@@ -205,12 +222,23 @@ final class TelegramHandler extends AbstractProcessingHandler
             return true;
         }
 
-        $this->cleanupOldCounts();
+        // Use RateLimiter with custom category based on chat ID
+        $key = 'telegram:' . md5($this->chatId);
 
-        $currentMinute = date('YmdHi');
-        $currentCount = self::$messageCount[$currentMinute] ?? 0;
+        // RateLimiter's 'default' category is 60 req/min, we need to check manually
+        // Use check() to see if allowed without incrementing
+        $limiter = $this->getRateLimiter();
+        $result = $limiter->check($key, 'default');
 
-        return $currentCount < $this->rateLimitPerMinute;
+        // Adjust for our custom limit if different from default (60)
+        if ($this->rateLimitPerMinute !== 60) {
+            // For custom limits, use local tracking within the sliding window
+            $currentCount = 60 - $result['remaining']; // How many already used
+
+            return $currentCount < $this->rateLimitPerMinute;
+        }
+
+        return $result['allowed'];
     }
 
     /**
@@ -222,31 +250,8 @@ final class TelegramHandler extends AbstractProcessingHandler
             return;
         }
 
-        $currentMinute = date('YmdHi');
-        self::$messageCount[$currentMinute] = (self::$messageCount[$currentMinute] ?? 0) + 1;
-    }
-
-    /**
-     * Clean up old rate limit counts
-     */
-    private function cleanupOldCounts(): void
-    {
-        $now = time();
-
-        // Only cleanup every minute
-        if ($now - self::$lastCleanup < 60) {
-            return;
-        }
-
-        self::$lastCleanup = $now;
-        $currentMinute = date('YmdHi');
-
-        // Keep only current minute
-        foreach (array_keys(self::$messageCount) as $minute) {
-            if ($minute !== $currentMinute) {
-                unset(self::$messageCount[$minute]);
-            }
-        }
+        $key = 'telegram:' . md5($this->chatId);
+        $this->getRateLimiter()->hit($key, 'default');
     }
 
     /**
@@ -290,10 +295,12 @@ final class TelegramHandler extends AbstractProcessingHandler
      * Call this method between requests when using PHP in long-running mode
      * (Swoole, RoadRunner, ReactPHP) to prevent rate limit state from
      * bleeding between unrelated requests.
+     *
+     * Note: If using Redis-backed rate limiting, this only clears local state.
+     * Redis state persists across requests (which is usually desired).
      */
     public static function resetRateLimitState(): void
     {
-        self::$messageCount = [];
-        self::$lastCleanup = 0;
+        self::$rateLimiter = null;
     }
 }

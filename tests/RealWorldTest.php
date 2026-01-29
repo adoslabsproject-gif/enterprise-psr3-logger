@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use AdosLabs\EnterprisePSR3Logger\Handlers\BufferHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\DatabaseHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
@@ -350,28 +349,29 @@ class RealWorldTest extends TestCase
     }
 
     // =========================================================================
-    // BUFFERED/ASYNC TESTS
+    // DATABASE BATCHING TESTS
     // =========================================================================
 
-    public function testBufferedDatabaseInsert(): void
+    public function testDatabaseHandlerBatching(): void
     {
         $pdo = $this->createSqliteDb();
-        $dbHandler = new DatabaseHandler($pdo, 'logs');
-        $bufferHandler = new BufferHandler($dbHandler, bufferLimit: 10, flushOnShutdown: false);
 
-        $logger = new Logger('buffer-test', [$bufferHandler]);
+        // Use DatabaseHandler with batchSize (built-in batching)
+        $dbHandler = new DatabaseHandler($pdo, 'logs', batchSize: 10);
 
-        // Write less than buffer limit
+        $logger = new Logger('batch-test', [$dbHandler]);
+
+        // Write less than batch size
         for ($i = 0; $i < 5; $i++) {
-            $logger->info("Buffered message $i");
+            $logger->info("Batched message $i");
         }
 
-        // Database should be empty (not flushed yet)
+        // Database should be empty (not flushed yet - batchSize not reached)
         $logs = DatabaseHandler::query($pdo, ['table' => 'logs']);
         $this->assertCount(0, $logs);
 
         // Manually flush
-        $bufferHandler->flush();
+        $dbHandler->flush();
 
         // Now database should have logs
         $logs = DatabaseHandler::query($pdo, ['table' => 'logs']);
@@ -380,32 +380,37 @@ class RealWorldTest extends TestCase
         $logger->close();
     }
 
-    public function testBufferFlushOnError(): void
+    public function testDatabaseHandlerAutoFlushOnBatchLimit(): void
     {
         $pdo = $this->createSqliteDb();
-        $dbHandler = new DatabaseHandler($pdo, 'logs');
-        $bufferHandler = new BufferHandler(
-            $dbHandler,
-            flushOnError: true,
-            flushOnShutdown: false,
-        );
 
-        $logger = new Logger('error-flush-test', [$bufferHandler]);
+        // Use DatabaseHandler with small batchSize
+        $dbHandler = new DatabaseHandler($pdo, 'logs', batchSize: 3);
 
-        // Write info logs
-        $logger->info('Info 1');
-        $logger->info('Info 2');
+        $logger = new Logger('auto-flush-test', [$dbHandler]);
 
-        // Database should be empty
-        $logs = DatabaseHandler::query($pdo, ['table' => 'logs']);
-        $this->assertCount(0, $logs);
+        // Write exactly batch size - should auto-flush
+        $logger->info('Message 1');
+        $logger->info('Message 2');
+        $logger->info('Message 3');
 
-        // Write error - should trigger flush
-        $logger->error('Error occurred');
-
-        // Database should have all logs now
+        // Database should have logs now (auto-flushed at batch limit)
         $logs = DatabaseHandler::query($pdo, ['table' => 'logs']);
         $this->assertCount(3, $logs);
+
+        // Write more
+        $logger->info('Message 4');
+        $logger->info('Message 5');
+
+        // Only 3 in DB (4 and 5 still buffered)
+        $logs = DatabaseHandler::query($pdo, ['table' => 'logs']);
+        $this->assertCount(3, $logs);
+
+        // Flush remaining
+        $dbHandler->flush();
+
+        $logs = DatabaseHandler::query($pdo, ['table' => 'logs']);
+        $this->assertCount(5, $logs);
 
         $logger->close();
     }

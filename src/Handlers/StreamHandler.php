@@ -37,7 +37,7 @@ use Monolog\LogRecord;
  * - Memory-efficient (no buffering by default)
  *
  * LIMITATIONS:
- * - Blocking I/O (use AsyncHandler for non-blocking)
+ * - Blocking I/O (use RedisBufferHandler for queue-based logging)
  * - File locking may impact performance under high concurrency
  */
 class StreamHandler extends AbstractProcessingHandler implements HandlerInterface

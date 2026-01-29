@@ -10,17 +10,17 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use Senza1dio\EnterprisePSR3Logger\Logger;
-use Senza1dio\EnterprisePSR3Logger\LoggerFactory;
-use Senza1dio\EnterprisePSR3Logger\LoggerManager;
-use Senza1dio\EnterprisePSR3Logger\Handlers\StreamHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\FilterHandler;
-use Senza1dio\EnterprisePSR3Logger\Handlers\BufferHandler;
-use Senza1dio\EnterprisePSR3Logger\Formatters\JsonFormatter;
-use Senza1dio\EnterprisePSR3Logger\Processors\RequestProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\HostnameProcessor;
-use Senza1dio\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
+use AdosLabs\EnterprisePSR3Logger\Logger;
+use AdosLabs\EnterprisePSR3Logger\LoggerFactory;
+use AdosLabs\EnterprisePSR3Logger\LoggerManager;
+use AdosLabs\EnterprisePSR3Logger\Handlers\StreamHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\FilterHandler;
+use AdosLabs\EnterprisePSR3Logger\Handlers\DatabaseHandler;
+use AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter;
+use AdosLabs\EnterprisePSR3Logger\Processors\RequestProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\HostnameProcessor;
+use AdosLabs\EnterprisePSR3Logger\Processors\ExecutionTimeProcessor;
 use Monolog\Level;
 
 echo "=== Production Setup Examples ===\n\n";
@@ -94,30 +94,33 @@ $auditLog->info('Audit trail entry', ['user_id' => 123]);
 echo "\nChannels active: " . implode(', ', $manager->getChannels()) . "\n\n";
 
 // -----------------------------------------------------------------------------
-// Example 3: Buffered logging
+// Example 3: Database batched logging (enterprise-grade)
 // -----------------------------------------------------------------------------
-echo "--- Example 3: Buffered Logging ---\n\n";
+echo "--- Example 3: Database Batched Logging ---\n\n";
 
-$innerHandler = new StreamHandler('php://stdout', Level::Debug);
-$innerHandler->setFormatter(new JsonFormatter());
+// Use SQLite in-memory for demo
+$pdo = new PDO('sqlite::memory:');
+DatabaseHandler::createTable($pdo, 'logs', 'sqlite');
 
-$bufferedHandler = new BufferHandler(
-    handler: $innerHandler,
-    bufferLimit: 100,
-    flushOnOverflow: true,
-    flushOnError: true,  // Flush immediately on errors
-    flushOnShutdown: true
+$dbHandler = new DatabaseHandler(
+    pdo: $pdo,
+    table: 'logs',
+    batchSize: 100  // Batch 100 records per INSERT
 );
 
-$bufferedLogger = new Logger('buffered', [$bufferedHandler]);
+$batchedLogger = new Logger('batched', [$dbHandler]);
 
-$bufferedLogger->debug('Buffered message 1');
-$bufferedLogger->debug('Buffered message 2');
-$bufferedLogger->debug('Buffered message 3');
-echo "Buffer size: " . $bufferedHandler->getBufferSize() . "\n";
+// Log multiple records (batched for performance)
+for ($i = 1; $i <= 5; $i++) {
+    $batchedLogger->info("Batched message $i", ['index' => $i]);
+}
 
-$bufferedLogger->error('Error triggers flush');
-echo "Buffer size after error: " . $bufferedHandler->getBufferSize() . "\n\n";
+// Flush remaining buffer
+$dbHandler->flush();
+
+// Query logs from database
+$logs = DatabaseHandler::query($pdo, ['table' => 'logs', 'limit' => 10]);
+echo "Logs in database: " . count($logs) . "\n\n";
 
 // -----------------------------------------------------------------------------
 // Example 4: Level-based routing
@@ -183,7 +186,7 @@ echo "--- Cleanup ---\n";
 echo "Removing temporary log files...\n";
 
 $manager->closeAll();
-$bufferedHandler->close();
+$dbHandler->close();
 
 foreach (glob("$logDir/*") as $file) {
     unlink($file);

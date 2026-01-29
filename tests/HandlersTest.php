@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
-use AdosLabs\EnterprisePSR3Logger\Handlers\BufferHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\FilterHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\GroupHandler;
 use AdosLabs\EnterprisePSR3Logger\Handlers\RotatingFileHandler;
@@ -267,80 +266,5 @@ class HandlersTest extends TestCase
         $handler->close();
 
         $this->assertTrue($result);
-    }
-
-    // === BufferHandler Tests ===
-
-    public function testBufferHandlerBuffersRecords(): void
-    {
-        $file = $this->tempDir . '/buffer.log';
-        $innerHandler = new StreamHandler($file);
-        $handler = new BufferHandler($innerHandler, flushOnShutdown: false);
-
-        $handler->handle($this->createRecord('Buffered'));
-
-        // File should not exist yet
-        $this->assertFileDoesNotExist($file);
-
-        $handler->flush();
-        $handler->close();
-
-        $this->assertFileExists($file);
-        $this->assertStringContainsString('Buffered', file_get_contents($file));
-    }
-
-    public function testBufferHandlerFlushOnLimit(): void
-    {
-        $file = $this->tempDir . '/buffer-limit.log';
-        $innerHandler = new StreamHandler($file);
-        $handler = new BufferHandler(
-            $innerHandler,
-            bufferLimit: 3,
-            flushOnOverflow: true,
-            flushOnShutdown: false,
-        );
-
-        $handler->handle($this->createRecord('One'));
-        $handler->handle($this->createRecord('Two'));
-        $handler->handle($this->createRecord('Three'));
-        // Buffer full, should auto-flush
-        $handler->handle($this->createRecord('Four'));
-
-        $this->assertFileExists($file);
-        $handler->close();
-    }
-
-    public function testBufferHandlerFlushOnError(): void
-    {
-        $file = $this->tempDir . '/buffer-error.log';
-        $innerHandler = new StreamHandler($file);
-        $handler = new BufferHandler(
-            $innerHandler,
-            flushOnError: true,
-            flushOnShutdown: false,
-        );
-
-        $handler->handle($this->createRecord('Info', Level::Info));
-        $this->assertFileDoesNotExist($file);
-
-        $handler->handle($this->createRecord('Error', Level::Error));
-        // Should have flushed on error
-        $this->assertFileExists($file);
-
-        $handler->close();
-    }
-
-    public function testBufferHandlerClear(): void
-    {
-        $file = $this->tempDir . '/buffer-clear.log';
-        $innerHandler = new StreamHandler($file);
-        $handler = new BufferHandler($innerHandler, flushOnShutdown: false);
-
-        $handler->handle($this->createRecord('Should be cleared'));
-        $handler->clear();
-        $handler->close();
-
-        // File should not exist because buffer was cleared
-        $this->assertFileDoesNotExist($file);
     }
 }
