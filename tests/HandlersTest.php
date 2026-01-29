@@ -131,6 +131,22 @@ class HandlersTest extends TestCase
         $this->assertFileExists($datePattern);
     }
 
+    public function testRotatingFileHandlerHourlyRotation(): void
+    {
+        $file = $this->tempDir . '/hourly.log';
+        $handler = new RotatingFileHandler(
+            filename: $file,
+            rotationType: RotatingFileHandler::ROTATION_HOURLY,
+        );
+
+        $handler->handle($this->createRecord());
+        $handler->close();
+
+        // Should create file with date and hour suffix
+        $hourlyPattern = $this->tempDir . '/hourly-' . date('Y-m-d-H') . '.log';
+        $this->assertFileExists($hourlyPattern);
+    }
+
     public function testRotatingFileHandlerRejectsPathTraversal(): void
     {
         $this->expectException(\InvalidArgumentException::class);

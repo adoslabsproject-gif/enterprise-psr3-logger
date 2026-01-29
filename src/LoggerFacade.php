@@ -48,9 +48,10 @@ class LoggerFacade
     private static array $loggers = [];
 
     /**
-     * @var callable|null Factory for creating new loggers
+     * Factory for creating new loggers
+     * @var (\Closure(string): Logger)|null
      */
-    private static $loggerFactory = null;
+    private static ?\Closure $loggerFactory = null;
 
     /**
      * @var bool Whether timezone has been initialized

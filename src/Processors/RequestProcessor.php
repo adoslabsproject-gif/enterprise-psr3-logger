@@ -35,9 +35,21 @@ use Monolog\Processor\ProcessorInterface;
  */
 class RequestProcessor implements ProcessorInterface
 {
-    private string $requestIdHeader;
-    private bool $anonymizeIp;
-    private int $userAgentMaxLength;
+    /** Maximum URL length to prevent log bloat */
+    private const MAX_URL_LENGTH = 500;
+
+    /** Maximum referrer length */
+    private const MAX_REFERRER_LENGTH = 200;
+
+    /** Maximum request ID length (UUID compatible) */
+    private const MAX_REQUEST_ID_LENGTH = 64;
+
+    /** Request ID validation pattern (alphanumeric + hyphen only) */
+    private const REQUEST_ID_PATTERN = '/^[a-zA-Z0-9\-]{1,64}$/';
+
+    private readonly string $requestIdHeader;
+    private readonly bool $anonymizeIp;
+    private readonly int $userAgentMaxLength;
     private ?string $cachedRequestId = null;
 
     /** @var array<string, mixed>|null Cached request data */
@@ -57,7 +69,7 @@ class RequestProcessor implements ProcessorInterface
     /**
      * @var bool If true, ONLY use REMOTE_ADDR (safe default for direct connections)
      */
-    private bool $trustProxyHeaders;
+    private readonly bool $trustProxyHeaders;
 
     /**
      * @param string $requestIdHeader Header containing request/correlation ID
@@ -125,15 +137,10 @@ class RequestProcessor implements ProcessorInterface
         $headerValue = $_SERVER[$headerKey] ?? null;
 
         // Validate request ID from header (prevent log injection/overflow)
-        if ($headerValue !== null) {
-            // Only allow alphanumeric, hyphens, max 64 chars (UUID format compatible)
-            if (preg_match('/^[a-zA-Z0-9\-]{1,64}$/', $headerValue)) {
-                $this->cachedRequestId = $headerValue;
-            } else {
-                // Invalid format - generate new one instead of using potentially malicious value
-                $this->cachedRequestId = $this->generateRequestId();
-            }
+        if ($headerValue !== null && preg_match(self::REQUEST_ID_PATTERN, $headerValue)) {
+            $this->cachedRequestId = $headerValue;
         } else {
+            // Invalid format or missing - generate new one
             $this->cachedRequestId = $this->generateRequestId();
         }
 
@@ -167,12 +174,12 @@ class RequestProcessor implements ProcessorInterface
             $data['http_method'] = $_SERVER['REQUEST_METHOD'];
         }
 
-        // URL (path + query)
+        // URL (path + query) - use constant for magic number
         $url = $_SERVER['REQUEST_URI'] ?? '';
         if ($url !== '') {
-            // Truncate very long URLs
-            if (strlen($url) > 500) {
-                $url = substr($url, 0, 500) . '...';
+            // Truncate very long URLs (use mb_substr for UTF-8 safety)
+            if (mb_strlen($url, 'UTF-8') > self::MAX_URL_LENGTH) {
+                $url = mb_substr($url, 0, self::MAX_URL_LENGTH, 'UTF-8') . '...';
             }
             $data['url'] = $url;
         }
@@ -183,20 +190,20 @@ class RequestProcessor implements ProcessorInterface
             $data['ip'] = $this->anonymizeIp ? $this->anonymizeIpAddress($ip) : $ip;
         }
 
-        // User Agent
+        // User Agent (use mb_substr for UTF-8 safety)
         if (isset($_SERVER['HTTP_USER_AGENT'])) {
             $userAgent = $_SERVER['HTTP_USER_AGENT'];
-            if (strlen($userAgent) > $this->userAgentMaxLength) {
-                $userAgent = substr($userAgent, 0, $this->userAgentMaxLength) . '...';
+            if (mb_strlen($userAgent, 'UTF-8') > $this->userAgentMaxLength) {
+                $userAgent = mb_substr($userAgent, 0, $this->userAgentMaxLength, 'UTF-8') . '...';
             }
             $data['user_agent'] = $userAgent;
         }
 
-        // Referrer (optional)
+        // Referrer (optional, use mb_substr for UTF-8 safety)
         if (isset($_SERVER['HTTP_REFERER'])) {
             $referrer = $_SERVER['HTTP_REFERER'];
-            if (strlen($referrer) > 200) {
-                $referrer = substr($referrer, 0, 200) . '...';
+            if (mb_strlen($referrer, 'UTF-8') > self::MAX_REFERRER_LENGTH) {
+                $referrer = mb_substr($referrer, 0, self::MAX_REFERRER_LENGTH, 'UTF-8') . '...';
             }
             $data['referrer'] = $referrer;
         }

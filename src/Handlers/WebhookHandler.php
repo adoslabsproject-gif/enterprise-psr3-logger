@@ -106,16 +106,22 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
 
         $scheme = strtolower($parsed['scheme']);
         $host = strtolower($parsed['host']);
+        $isLocalhost = in_array($host, ['localhost', '127.0.0.1'], true);
 
-        // Only allow HTTPS (HTTP only for localhost in development)
-        $allowedSchemes = ['https'];
-        if (in_array($host, ['localhost', '127.0.0.1'], true)) {
-            $allowedSchemes[] = 'http';
+        // SECURITY: Localhost only allowed in non-production environments
+        // Check APP_ENV, APP_DEBUG, or explicit WEBHOOK_ALLOW_LOCALHOST=true
+        $isProduction = $this->isProductionEnvironment();
+        if ($isLocalhost && $isProduction) {
+            throw new \InvalidArgumentException(
+                'Webhook URL cannot use localhost in production environment. ' .
+                'Set APP_ENV=local or WEBHOOK_ALLOW_LOCALHOST=true to allow localhost webhooks.',
+            );
         }
 
-        if (!in_array($scheme, $allowedSchemes, true)) {
+        // Only allow HTTPS (HTTP only for localhost in non-production)
+        if ($scheme !== 'https' && !($isLocalhost && !$isProduction)) {
             throw new \InvalidArgumentException(
-                'Webhook URL must use HTTPS scheme for security (HTTP allowed only for localhost)',
+                'Webhook URL must use HTTPS scheme for security (HTTP allowed only for localhost in development)',
             );
         }
 
@@ -132,14 +138,20 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
             );
         }
 
+        // Skip IP validation for allowed localhost
+        if ($isLocalhost && !$isProduction) {
+            return;
+        }
+
         // Block internal/private IP ranges (SSRF protection)
         if (filter_var($ip, FILTER_VALIDATE_IP)) {
-            $blockedRanges = [
+            // Use static const for zero-allocation on repeated calls
+            static $blockedRanges = [
                 '10.0.0.0/8',       // Private Class A
                 '172.16.0.0/12',    // Private Class B
                 '192.168.0.0/16',   // Private Class C
-                '127.0.0.0/8',      // Loopback (except explicit localhost)
-                '169.254.0.0/16',   // Link-local (includes AWS metadata)
+                '127.0.0.0/8',      // Loopback
+                '169.254.0.0/16',   // Link-local (includes AWS/GCP/Azure metadata)
                 '0.0.0.0/8',        // Current network
                 '100.64.0.0/10',    // Carrier-grade NAT
                 '192.0.0.0/24',     // IETF Protocol Assignments
@@ -150,11 +162,6 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
                 '240.0.0.0/4',      // Reserved
                 '255.255.255.255/32', // Broadcast
             ];
-
-            // Allow localhost explicitly
-            if (in_array($host, ['localhost', '127.0.0.1'], true)) {
-                return;
-            }
 
             foreach ($blockedRanges as $range) {
                 if ($this->ipInRange($ip, $range)) {
@@ -178,6 +185,47 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
         $mask = -1 << (32 - (int) $bits);
 
         return ($ipLong & $mask) === ($subnetLong & $mask);
+    }
+
+    /**
+     * Check if we're running in a production environment
+     *
+     * Uses multiple signals to determine production status:
+     * 1. WEBHOOK_ALLOW_LOCALHOST=true explicitly allows localhost
+     * 2. APP_ENV=production or APP_ENV=prod indicates production
+     * 3. APP_DEBUG=false without APP_ENV suggests production
+     * 4. Default: assume production for security (fail-safe)
+     */
+    private function isProductionEnvironment(): bool
+    {
+        // Explicit override to allow localhost
+        $allowLocalhost = $_ENV['WEBHOOK_ALLOW_LOCALHOST'] ?? getenv('WEBHOOK_ALLOW_LOCALHOST');
+        if ($allowLocalhost === 'true' || $allowLocalhost === '1') {
+            return false; // Not production (localhost allowed)
+        }
+
+        // Check APP_ENV
+        $appEnv = $_ENV['APP_ENV'] ?? getenv('APP_ENV') ?: null;
+        if ($appEnv !== null) {
+            $appEnv = strtolower($appEnv);
+            // Non-production environments
+            if (in_array($appEnv, ['local', 'dev', 'development', 'testing', 'test', 'staging'], true)) {
+                return false;
+            }
+            // Production environments
+            if (in_array($appEnv, ['production', 'prod', 'live'], true)) {
+                return true;
+            }
+        }
+
+        // Check APP_DEBUG (debug=true suggests non-production)
+        $appDebug = $_ENV['APP_DEBUG'] ?? getenv('APP_DEBUG');
+        if ($appDebug === 'true' || $appDebug === '1') {
+            return false;
+        }
+
+        // Default: assume production for security
+        return true;
     }
 
     /**
