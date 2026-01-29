@@ -204,7 +204,9 @@ final class TelegramHandler extends AbstractProcessingHandler
         // HTTP error
         if ($httpCode !== 200) {
             // Parse Telegram API error response for better debugging
-            $errorDescription = $this->parseTelegramError($response);
+            // PHPStan: $response is string here since we checked for false above and CURLOPT_RETURNTRANSFER is true
+            $responseString = is_string($response) ? $response : '';
+            $errorDescription = $this->parseTelegramError($responseString);
             error_log("TelegramHandler: HTTP {$httpCode} - {$errorDescription}");
 
             return false;
