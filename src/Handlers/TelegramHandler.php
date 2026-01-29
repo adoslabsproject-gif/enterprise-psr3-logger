@@ -209,12 +209,12 @@ final class TelegramHandler extends AbstractProcessingHandler
     }
 
     /**
-     * Check if we're within rate limit using TRUE sliding window
+     * Check if we're within rate limit AND increment counter atomically
      *
-     * Uses RateLimiter with proper sliding window algorithm:
-     * - Supports Redis for distributed rate limiting
-     * - Falls back to local memory if Redis unavailable
-     * - No fixed minute boundary issues (true sliding window)
+     * Uses RateLimiter::attemptWithLimit() for custom rate limits.
+     * This is atomic - no race condition between check and increment.
+     *
+     * Returns true if message can be sent, false if rate limited.
      */
     private function isWithinRateLimit(): bool
     {
@@ -222,36 +222,30 @@ final class TelegramHandler extends AbstractProcessingHandler
             return true;
         }
 
-        // Use RateLimiter with custom category based on chat ID
+        // Use atomic attemptWithLimit with our EXACT custom rate
+        // Key is unique per chat to allow independent rate limiting per destination
         $key = 'telegram:' . md5($this->chatId);
-
-        // RateLimiter's 'default' category is 60 req/min, we need to check manually
-        // Use check() to see if allowed without incrementing
-        $limiter = $this->getRateLimiter();
-        $result = $limiter->check($key, 'default');
-
-        // Adjust for our custom limit if different from default (60)
-        if ($this->rateLimitPerMinute !== 60) {
-            // For custom limits, use local tracking within the sliding window
-            $currentCount = 60 - $result['remaining']; // How many already used
-
-            return $currentCount < $this->rateLimitPerMinute;
-        }
+        $result = $this->getRateLimiter()->attemptWithLimit(
+            $key,
+            $this->rateLimitPerMinute,
+            60, // 1 minute window
+        );
 
         return $result['allowed'];
     }
 
     /**
      * Increment message count for rate limiting
+     *
+     * NOTE: This is now a no-op because isWithinRateLimit() uses atomic
+     * attemptWithLimit() which already increments on success.
+     * Kept for backwards compatibility in case subclasses override write().
+     *
+     * @deprecated Will be removed in v3.0. Rate limiting is now atomic.
      */
     private function incrementMessageCount(): void
     {
-        if ($this->rateLimitPerMinute <= 0) {
-            return;
-        }
-
-        $key = 'telegram:' . md5($this->chatId);
-        $this->getRateLimiter()->hit($key, 'default');
+        // No-op: attemptWithLimit() already increments atomically
     }
 
     /**

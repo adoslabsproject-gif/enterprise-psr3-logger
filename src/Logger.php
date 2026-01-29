@@ -256,26 +256,25 @@ class Logger implements LoggerInterface
 
     public function log($level, string|Stringable $message, array $context = []): void
     {
-        // 🔥 ENTERPRISE: Check global should_log() function FIRST for config-based filtering
-        // PERFORMANCE: Single function_exists check, cached result in static var
+        // OPTIONAL: Check global should_log() function for config-based filtering
+        // This is an EXTENSION POINT - if the function exists, it's called.
+        // If not, all logs are processed (standard behavior).
+        //
+        // To use: define should_log(string $channel, string $level): bool in global namespace
+        // Return false to skip logging for that channel+level combination.
         static $shouldLogFunction = null;
         static $initialized = false;
 
         if (!$initialized) {
             $initialized = true;
-            // Check only global namespace - that's the documented requirement
             if (function_exists('\should_log')) {
                 $shouldLogFunction = '\should_log';
-            } else {
-                // Warning logged once per process
-                error_log('[ENTERPRISE PSR-3 LOGGER] WARNING: should_log() function not found. ' .
-                    'All logs will be written without configuration-based filtering. ' .
-                    'Define should_log() in the GLOBAL namespace in your bootstrap for production use.');
             }
+            // No warning if not defined - should_log is OPTIONAL
         }
 
         if ($shouldLogFunction !== null && !$shouldLogFunction($this->channel, $level)) {
-            return; // Exit immediately - zero overhead
+            return;
         }
 
         // 🔥 SAMPLING: Apply probabilistic sampling for high-volume logs

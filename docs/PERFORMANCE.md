@@ -208,21 +208,21 @@ Shared static cache across all RequestProcessor instances:
 
 ```php
 private static ?array $sharedRequestCache = null;
-private static int $sharedCacheTime = 0;
 
 public function __invoke(LogRecord $record): LogRecord
 {
     // Use SHARED cache for default-configured instances
-    $now = time();
-    if (self::$sharedRequestCache === null || ($now - self::$sharedCacheTime) > self::SHARED_CACHE_TTL) {
+    // No TTL - within a single HTTP request, $_SERVER doesn't change
+    if (self::$sharedRequestCache === null) {
         self::$sharedRequestCache = $this->buildRequestData();
-        self::$sharedCacheTime = $now;
     }
     return $record->with(extra: [...$record->extra, ...self::$sharedRequestCache]);
 }
 ```
 
 Eliminates redundant $_SERVER parsing when multiple loggers exist (20-50% CPU reduction for multi-logger apps).
+
+**IMPORTANT for long-running processes:** Call `RequestProcessor::resetSharedCache()` between requests.
 
 ### 11. Probabilistic Sampling
 

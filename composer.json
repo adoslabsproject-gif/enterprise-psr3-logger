@@ -54,8 +54,7 @@
         },
         "files": [
             "src/helpers.php",
-            "src/Helpers/functions.php",
-            "src/Helpers/should_log_stub.php"
+            "src/Helpers/functions.php"
         ]
     },
     "autoload-dev": {

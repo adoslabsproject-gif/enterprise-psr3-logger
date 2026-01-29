@@ -210,9 +210,9 @@ class UserProcessor implements ProcessorInterface
 - **RequestProcessor**: Uses SHARED static cache across ALL instances
   - Eliminates redundant $_SERVER parsing when multiple loggers exist
   - 20-50% CPU reduction for multi-logger apps
-  - 1-second cache TTL (configurable)
+  - Cache persists for entire HTTP request (no TTL - $_SERVER doesn't change within a request)
   - Instances with custom settings use instance-level cache
-  - Call `RequestProcessor::resetSharedCache()` for long-running processes
+  - **MUST call `RequestProcessor::resetSharedCache()` between requests in long-running processes** (Swoole, RoadRunner, ReactPHP)
 - **HostnameProcessor**: Caches hostname/IP (static values)
 - **MemoryProcessor**: Calls memory_get_usage() each time (minimal overhead)
 - **ExecutionTimeProcessor**: Simple microtime calculation

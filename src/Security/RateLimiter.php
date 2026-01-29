@@ -116,6 +116,38 @@ final class RateLimiter
     }
 
     /**
+     * Atomic attempt with CUSTOM rate limit (not using predefined categories)
+     *
+     * Use this when you need a specific rate limit that doesn't match
+     * the predefined categories (default, sensitive, test, auth).
+     *
+     * @param string $key Unique identifier
+     * @param int $maxRequests Maximum requests allowed in window
+     * @param int $windowSeconds Window size in seconds
+     * @return array{allowed: bool, remaining: int, reset_at: int, retry_after: int|null}
+     */
+    public function attemptWithLimit(string $key, int $maxRequests, int $windowSeconds = 60): array
+    {
+        $fullKey = $this->prefix . $key;
+        $now = time();
+
+        if ($this->redis !== null) {
+            return $this->attemptRedisAtomic($fullKey, $maxRequests, $windowSeconds, $now);
+        }
+
+        // Fallback to non-atomic local
+        $windowStart = $now - $windowSeconds;
+        $result = $this->checkLocal($fullKey, $maxRequests, $windowSeconds, $now, $windowStart);
+
+        if ($result['allowed']) {
+            $this->hitLocal($fullKey, $now);
+            $result['remaining']--;
+        }
+
+        return $result;
+    }
+
+    /**
      * Atomic check+hit using Redis Lua script
      *
      * This eliminates the race condition between check() and hit().
@@ -169,7 +201,10 @@ final class RateLimiter
             LUA;
 
         try {
-            $uniqueSuffix = bin2hex(random_bytes(8));
+            // Use 16 bytes (128 bits) for collision-resistant unique suffix
+            // With 8 bytes (64 bits), birthday paradox gives 50% collision at ~5 billion entries
+            // With 16 bytes (128 bits), collision probability is negligible even at scale
+            $uniqueSuffix = bin2hex(random_bytes(16));
             $result = $redis->eval(
                 $luaScript,
                 [$key, (string) $windowStart, (string) $now, (string) $maxRequests, (string) $windowSeconds, $uniqueSuffix],
@@ -316,7 +351,8 @@ final class RateLimiter
         }
 
         // Add current timestamp to sorted set with cryptographically secure suffix
-        $redis->zAdd($key, $now, (string) $now . '.' . bin2hex(random_bytes(8)));
+        // 16 bytes = 128 bits of entropy, collision-resistant at any scale
+        $redis->zAdd($key, $now, (string) $now . '.' . bin2hex(random_bytes(16)));
         $redis->expire($key, $windowSeconds + 1);
     }
 

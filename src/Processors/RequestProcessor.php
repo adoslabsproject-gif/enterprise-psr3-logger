@@ -44,23 +44,23 @@ class RequestProcessor implements ProcessorInterface
     /** Request ID validation pattern (alphanumeric + hyphen only, max 64 chars) */
     private const REQUEST_ID_PATTERN = '/^[a-zA-Z0-9\-]{1,64}$/';
 
-    /** Cache TTL in seconds for shared request cache */
-    private const SHARED_CACHE_TTL = 1;
-
     private readonly string $requestIdHeader;
     private readonly bool $anonymizeIp;
     private readonly int $userAgentMaxLength;
     private ?string $cachedRequestId = null;
 
     /**
-     * SHARED cache across all RequestProcessor instances
-     * This eliminates redundant $_SERVER parsing when multiple loggers exist
+     * SHARED cache across all RequestProcessor instances WITH DEFAULT SETTINGS
+     *
+     * Within a single HTTP request, $_SERVER data doesn't change.
+     * This cache persists for the entire request lifecycle (not TTL-based).
+     *
+     * Call resetSharedCache() between requests in long-running processes
+     * (Swoole, RoadRunner, ReactPHP, etc.).
+     *
      * @var array<string, mixed>|null
      */
     private static ?array $sharedRequestCache = null;
-
-    /** Timestamp when shared cache was last built */
-    private static int $sharedCacheTime = 0;
 
     /** @var array<string, mixed>|null Instance-specific cached request data (for custom settings) */
     private ?array $cachedData = null;
@@ -144,22 +144,34 @@ class RequestProcessor implements ProcessorInterface
         }
 
         // Use SHARED cache for default-configured instances (common case)
-        $now = time();
-        if (self::$sharedRequestCache === null || ($now - self::$sharedCacheTime) > self::SHARED_CACHE_TTL) {
+        // No TTL needed - within a single HTTP request, $_SERVER doesn't change
+        if (self::$sharedRequestCache === null) {
             self::$sharedRequestCache = $this->buildRequestData();
-            self::$sharedCacheTime = $now;
         }
 
         return $record->with(extra: [...$record->extra, ...self::$sharedRequestCache]);
     }
 
     /**
-     * Reset shared cache (for long-running processes between requests)
+     * Reset ALL caches (for long-running processes between requests)
+     *
+     * MUST be called between requests in long-running processes:
+     * - Swoole
+     * - RoadRunner
+     * - ReactPHP
+     * - PHP-FPM persistent workers (if reusing objects between requests)
+     *
+     * Example with Swoole:
+     * ```php
+     * $server->on('request', function ($request, $response) {
+     *     RequestProcessor::resetSharedCache();
+     *     // ... handle request
+     * });
+     * ```
      */
     public static function resetSharedCache(): void
     {
         self::$sharedRequestCache = null;
-        self::$sharedCacheTime = 0;
     }
 
     /**
@@ -188,11 +200,15 @@ class RequestProcessor implements ProcessorInterface
 
     /**
      * Set request ID manually (useful for CLI or custom scenarios)
+     *
+     * NOTE: This invalidates BOTH instance and shared cache to ensure
+     * all loggers see the new request ID.
      */
     public function setRequestId(string $requestId): self
     {
         $this->cachedRequestId = $requestId;
-        $this->cachedData = null; // Invalidate cache
+        $this->cachedData = null; // Invalidate instance cache
+        self::$sharedRequestCache = null; // Invalidate shared cache too
 
         return $this;
     }
@@ -282,13 +298,18 @@ class RequestProcessor implements ProcessorInterface
     /**
      * Set trusted proxy headers for IP detection
      *
+     * NOTE: This marks the instance as having custom settings and invalidates
+     * both instance and shared cache.
+     *
      * @param array<string> $headers Headers to trust (e.g., ['REMOTE_ADDR'] for no proxy)
      * @return self
      */
     public function setTrustedProxyHeaders(array $headers): self
     {
         $this->trustedProxyHeaders = $headers;
-        $this->cachedData = null; // Invalidate cache
+        $this->hasCustomSettings = true; // This instance now has custom config
+        $this->cachedData = null; // Invalidate instance cache
+        self::$sharedRequestCache = null; // Invalidate shared cache for consistency
 
         return $this;
     }

@@ -239,11 +239,24 @@ $result = $limiter->check('key', 'category');
 // Record a hit (increment counter)
 $limiter->hit('key', 'category');
 
-// Check and hit in one call
+// Check and hit in one call (ATOMIC - recommended)
 $result = $limiter->attempt('key', 'category');
+
+// Check and hit with CUSTOM rate limit (not using predefined categories)
+$result = $limiter->attemptWithLimit('key', maxRequests: 30, windowSeconds: 60);
 
 // Clear rate limit for a key
 $limiter->clear('key');
+```
+
+**Custom Rate Limits:**
+```php
+// Use attemptWithLimit() for rates that don't match predefined categories
+$result = $limiter->attemptWithLimit(
+    'telegram:' . $chatId,
+    maxRequests: 30,    // Custom limit
+    windowSeconds: 60   // 1 minute window
+);
 ```
 
 ## Helper Functions

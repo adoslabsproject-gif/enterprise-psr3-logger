@@ -190,42 +190,69 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
     /**
      * Check if we're running in a production environment
      *
-     * Uses multiple signals to determine production status:
-     * 1. WEBHOOK_ALLOW_LOCALHOST=true explicitly allows localhost
-     * 2. APP_ENV=production or APP_ENV=prod indicates production
-     * 3. APP_DEBUG=false without APP_ENV suggests production
-     * 4. Default: assume production for security (fail-safe)
+     * SECURITY: Fail-safe design - defaults to production to prevent
+     * accidental localhost webhook exposure in production.
+     *
+     * Detection order (first match wins):
+     * 1. WEBHOOK_ALLOW_LOCALHOST=true → NOT production (explicit override)
+     * 2. APP_DEBUG=true/1 → NOT production (debug mode)
+     * 3. APP_ENV in [local, dev, development, testing, test, staging] → NOT production
+     * 4. APP_ENV in [production, prod, live] → IS production
+     * 5. Default → IS production (fail-safe)
      */
     private function isProductionEnvironment(): bool
     {
-        // Explicit override to allow localhost
-        $allowLocalhost = $_ENV['WEBHOOK_ALLOW_LOCALHOST'] ?? getenv('WEBHOOK_ALLOW_LOCALHOST');
+        // 1. Explicit override to allow localhost (highest priority)
+        $allowLocalhost = $this->getEnvValue('WEBHOOK_ALLOW_LOCALHOST');
         if ($allowLocalhost === 'true' || $allowLocalhost === '1') {
-            return false; // Not production (localhost allowed)
+            return false;
         }
 
-        // Check APP_ENV
-        $appEnv = $_ENV['APP_ENV'] ?? getenv('APP_ENV') ?: null;
-        if ($appEnv !== null) {
-            $appEnv = strtolower($appEnv);
-            // Non-production environments
-            if (in_array($appEnv, ['local', 'dev', 'development', 'testing', 'test', 'staging'], true)) {
-                return false;
-            }
-            // Production environments
-            if (in_array($appEnv, ['production', 'prod', 'live'], true)) {
-                return true;
-            }
-        }
-
-        // Check APP_DEBUG (debug=true suggests non-production)
-        $appDebug = $_ENV['APP_DEBUG'] ?? getenv('APP_DEBUG');
+        // 2. Check APP_DEBUG first (debug mode = not production)
+        $appDebug = $this->getEnvValue('APP_DEBUG');
         if ($appDebug === 'true' || $appDebug === '1') {
             return false;
         }
 
-        // Default: assume production for security
+        // 3. Check APP_ENV
+        $appEnv = $this->getEnvValue('APP_ENV');
+        if ($appEnv !== null && $appEnv !== '') {
+            $appEnv = strtolower($appEnv);
+
+            // Non-production environments
+            if (in_array($appEnv, ['local', 'dev', 'development', 'testing', 'test', 'staging'], true)) {
+                return false;
+            }
+
+            // Production environments
+            if (in_array($appEnv, ['production', 'prod', 'live'], true)) {
+                return true;
+            }
+
+            // Unknown APP_ENV value - treat as production for safety
+        }
+
+        // 4. Default: assume production for security (fail-safe)
         return true;
+    }
+
+    /**
+     * Get environment variable value safely
+     *
+     * Checks $_ENV first (faster), then getenv() as fallback.
+     * Returns null if not set (not false like getenv).
+     */
+    private function getEnvValue(string $name): ?string
+    {
+        // Check $_ENV first (populated by dotenv libraries)
+        if (isset($_ENV[$name]) && $_ENV[$name] !== '') {
+            return (string) $_ENV[$name];
+        }
+
+        // Fallback to getenv (slower, but works in all contexts)
+        $value = getenv($name);
+
+        return $value !== false ? $value : null;
     }
 
     /**
