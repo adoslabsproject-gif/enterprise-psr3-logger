@@ -75,11 +75,107 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
     ) {
         parent::__construct($level, $bubble);
 
+        // SSRF Protection: Validate URL before accepting
+        $this->validateWebhookUrl($url);
+
         $this->url = $url;
         $this->headers = $headers;
         $this->timeout = $timeout;
         $this->verifySSL = $verifySSL;
         $this->payloadTransformer = $payloadTransformer;
+    }
+
+    /**
+     * Validate webhook URL to prevent SSRF attacks
+     *
+     * Blocks:
+     * - Internal IP ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x, 127.x.x.x)
+     * - Cloud metadata endpoints (169.254.169.254)
+     * - Non-HTTPS schemes (except for localhost in development)
+     * - File, FTP, gopher and other dangerous schemes
+     *
+     * @throws \InvalidArgumentException If URL is invalid or potentially dangerous
+     */
+    private function validateWebhookUrl(string $url): void
+    {
+        $parsed = parse_url($url);
+
+        if ($parsed === false || !isset($parsed['scheme'], $parsed['host'])) {
+            throw new \InvalidArgumentException('Invalid webhook URL format');
+        }
+
+        $scheme = strtolower($parsed['scheme']);
+        $host = strtolower($parsed['host']);
+
+        // Only allow HTTPS (HTTP only for localhost in development)
+        $allowedSchemes = ['https'];
+        if (in_array($host, ['localhost', '127.0.0.1'], true)) {
+            $allowedSchemes[] = 'http';
+        }
+
+        if (!in_array($scheme, $allowedSchemes, true)) {
+            throw new \InvalidArgumentException(
+                'Webhook URL must use HTTPS scheme for security (HTTP allowed only for localhost)',
+            );
+        }
+
+        // Resolve hostname to IP to check for internal addresses
+        $ip = gethostbyname($host);
+
+        // If gethostbyname returns the hostname, DNS resolution failed
+        if ($ip === $host && !filter_var($host, FILTER_VALIDATE_IP)) {
+            // Allow the request but log warning - DNS might be temporarily unavailable
+            error_log("[WebhookHandler] Warning: Could not resolve hostname: {$host}");
+
+            return;
+        }
+
+        // Block internal/private IP ranges (SSRF protection)
+        if (filter_var($ip, FILTER_VALIDATE_IP)) {
+            $blockedRanges = [
+                '10.0.0.0/8',       // Private Class A
+                '172.16.0.0/12',    // Private Class B
+                '192.168.0.0/16',   // Private Class C
+                '127.0.0.0/8',      // Loopback (except explicit localhost)
+                '169.254.0.0/16',   // Link-local (includes AWS metadata)
+                '0.0.0.0/8',        // Current network
+                '100.64.0.0/10',    // Carrier-grade NAT
+                '192.0.0.0/24',     // IETF Protocol Assignments
+                '192.0.2.0/24',     // TEST-NET-1
+                '198.51.100.0/24',  // TEST-NET-2
+                '203.0.113.0/24',   // TEST-NET-3
+                '224.0.0.0/4',      // Multicast
+                '240.0.0.0/4',      // Reserved
+                '255.255.255.255/32', // Broadcast
+            ];
+
+            // Allow localhost explicitly
+            if (in_array($host, ['localhost', '127.0.0.1'], true)) {
+                return;
+            }
+
+            foreach ($blockedRanges as $range) {
+                if ($this->ipInRange($ip, $range)) {
+                    throw new \InvalidArgumentException(
+                        'Webhook URL resolves to internal/private IP address (SSRF protection)',
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Check if an IP is within a CIDR range
+     */
+    private function ipInRange(string $ip, string $cidr): bool
+    {
+        [$subnet, $bits] = explode('/', $cidr);
+
+        $ipLong = ip2long($ip);
+        $subnetLong = ip2long($subnet);
+        $mask = -1 << (32 - (int) $bits);
+
+        return ($ipLong & $mask) === ($subnetLong & $mask);
     }
 
     /**

@@ -93,16 +93,7 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
         parent::__construct($level, $bubble);
 
         // Validate table name (prevent SQL injection)
-        // 1. Must start with letter/underscore, contain only alphanumeric/underscore
-        // 2. Max 63 characters (PostgreSQL limit, MySQL is 64)
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/', $table)) {
-            throw new \InvalidArgumentException('Invalid table name: must be alphanumeric with max 63 characters');
-        }
-
-        // 3. Block system table prefixes (defense-in-depth)
-        if (preg_match('/^(pg_|mysql\.|information_schema|sys\.|sqlite_)/i', $table)) {
-            throw new \InvalidArgumentException('System table names are not allowed');
-        }
+        self::validateTableName($table);
 
         $this->pdo = $pdo;
         $this->table = $table;
@@ -279,13 +270,8 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
     {
         $driver ??= $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
 
-        // Validate table name (same rules as constructor)
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/', $table)) {
-            throw new \InvalidArgumentException('Invalid table name: must be alphanumeric with max 63 characters');
-        }
-        if (preg_match('/^(pg_|mysql\.|information_schema|sys\.|sqlite_)/i', $table)) {
-            throw new \InvalidArgumentException('System table names are not allowed');
-        }
+        // Validate table name
+        self::validateTableName($table);
 
         $sql = match ($driver) {
             'mysql' => "
@@ -368,13 +354,8 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
     {
         $table = $filters['table'] ?? 'logs';
 
-        // Validate table name (same rules as constructor)
-        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/', $table)) {
-            throw new \InvalidArgumentException('Invalid table name: must be alphanumeric with max 63 characters');
-        }
-        if (preg_match('/^(pg_|mysql\.|information_schema|sys\.|sqlite_)/i', $table)) {
-            throw new \InvalidArgumentException('System table names are not allowed');
-        }
+        // Validate table name
+        self::validateTableName($table);
 
         $where = [];
         $params = [];
@@ -433,5 +414,31 @@ class DatabaseHandler extends AbstractProcessingHandler implements HandlerInterf
     protected function getDefaultFormatter(): FormatterInterface
     {
         return new \AdosLabs\EnterprisePSR3Logger\Formatters\JsonFormatter(appendNewline: false);
+    }
+
+    /**
+     * Validate table name to prevent SQL injection
+     *
+     * Rules:
+     * 1. Must start with letter or underscore
+     * 2. Can only contain alphanumeric and underscore
+     * 3. Max 63 characters (PostgreSQL limit)
+     * 4. Cannot be a system table prefix
+     *
+     * @throws \InvalidArgumentException If table name is invalid
+     */
+    private static function validateTableName(string $table): void
+    {
+        // Check format and length
+        if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/', $table)) {
+            throw new \InvalidArgumentException(
+                'Invalid table name: must start with letter/underscore, contain only alphanumeric/underscore, max 63 characters',
+            );
+        }
+
+        // Block system table prefixes (defense-in-depth)
+        if (preg_match('/^(pg_|mysql\.|information_schema|sys\.|sqlite_)/i', $table)) {
+            throw new \InvalidArgumentException('System table names are not allowed');
+        }
     }
 }

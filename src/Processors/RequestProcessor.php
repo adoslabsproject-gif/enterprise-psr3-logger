@@ -122,10 +122,18 @@ class RequestProcessor implements ProcessorInterface
 
         // Try to get from header
         $headerKey = 'HTTP_' . strtoupper(str_replace('-', '_', $this->requestIdHeader));
-        $this->cachedRequestId = $_SERVER[$headerKey] ?? null;
+        $headerValue = $_SERVER[$headerKey] ?? null;
 
-        // Generate if not found
-        if ($this->cachedRequestId === null) {
+        // Validate request ID from header (prevent log injection/overflow)
+        if ($headerValue !== null) {
+            // Only allow alphanumeric, hyphens, max 64 chars (UUID format compatible)
+            if (preg_match('/^[a-zA-Z0-9\-]{1,64}$/', $headerValue)) {
+                $this->cachedRequestId = $headerValue;
+            } else {
+                // Invalid format - generate new one instead of using potentially malicious value
+                $this->cachedRequestId = $this->generateRequestId();
+            }
+        } else {
             $this->cachedRequestId = $this->generateRequestId();
         }
 

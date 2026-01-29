@@ -30,7 +30,12 @@ final class TelegramHandler extends AbstractProcessingHandler
     private bool $silent;
     private int $rateLimitPerMinute;
 
-    /** @var array<string, int> Rate limit tracking */
+    /**
+     * @var array<string, int> Rate limit tracking
+     *                         Note: Static state is acceptable for short-lived PHP requests.
+     *                         For long-running processes (Swoole, RoadRunner), call resetRateLimitState()
+     *                         between requests or inject an external rate limiter.
+     */
     private static array $messageCount = [];
     private static int $lastCleanup = 0;
 
@@ -265,17 +270,30 @@ final class TelegramHandler extends AbstractProcessingHandler
     }
 
     /**
-     * Get handler configuration
+     * Get handler configuration (secrets redacted for security)
      */
     public function getConfig(): array
     {
         return [
-            'bot_token' => substr($this->botToken, 0, 10) . '...',
-            'chat_id' => $this->chatId,
+            'bot_token' => '[REDACTED]',
+            'chat_id' => str_repeat('*', max(0, strlen($this->chatId) - 4)) . substr($this->chatId, -4),
             'enabled' => $this->enabled,
             'silent' => $this->silent,
             'rate_limit' => $this->rateLimitPerMinute,
             'min_level' => $this->level->name,
         ];
+    }
+
+    /**
+     * Reset rate limit state (for long-running processes)
+     *
+     * Call this method between requests when using PHP in long-running mode
+     * (Swoole, RoadRunner, ReactPHP) to prevent rate limit state from
+     * bleeding between unrelated requests.
+     */
+    public static function resetRateLimitState(): void
+    {
+        self::$messageCount = [];
+        self::$lastCleanup = 0;
     }
 }
