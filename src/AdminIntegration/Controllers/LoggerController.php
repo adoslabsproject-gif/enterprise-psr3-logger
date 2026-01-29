@@ -1549,7 +1549,8 @@ final class LoggerController extends BaseController
             }
 
             // Format 4: PHP error format - [27-Jan-2026 15:30:45 Europe/Rome] PHP Warning: message
-            if (preg_match('/^\[(\d{2}-\w{3}-\d{4} \d{2}:\d{2}:\d{2}(?:\s+\S+)?)\]\s+(PHP \w+):\s*(.*)$/', $line, $matches)) {
+            // Supports "PHP Fatal error", "PHP Warning", "PHP Notice", etc.
+            if (preg_match('/^\[(\d{2}-\w{3}-\d{4} \d{2}:\d{2}:\d{2}(?:\s+\S+)?)\]\s+(PHP [\w\s]+):\s*(.*)$/', $line, $matches)) {
                 $finalizeEntry();
 
                 $phpLevel = strtolower($matches[2]);
