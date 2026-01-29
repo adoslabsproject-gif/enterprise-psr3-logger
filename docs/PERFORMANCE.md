@@ -230,7 +230,7 @@ $stmt->execute($values);
    }
    ```
 
-3. **Use AsyncHandler for slow backends**: Wrap database/webhook handlers with AsyncHandler
+3. **Use RedisBufferHandler for queue-based logging**: Queue logs to Redis for background worker processing
 
 4. **Configure batch sizes**: For DatabaseHandler, use batch inserts:
    ```php

@@ -113,8 +113,8 @@ composer require ados-labs/enterprise-bootstrap
 
 ## Test Coverage
 
-- **202 tests**
-- **982 assertions**
+- **198 tests**
+- **976 assertions**
 - Security tests
 - SSRF tests
 - Log parsing tests

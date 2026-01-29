@@ -2,7 +2,7 @@
 
 ## Overview
 
-Enterprise PSR-3 Logger provides 12 specialized handlers for different logging needs.
+Enterprise PSR-3 Logger provides 10 specialized handlers for different logging needs.
 
 ## Core Handlers
 
@@ -65,7 +65,7 @@ $handler = new RotatingFileHandler(
 
 ### DatabaseHandler
 
-Write logs to database (MySQL, PostgreSQL, SQLite).
+Write logs to database (MySQL, PostgreSQL, SQLite) with batching.
 
 ```php
 use AdosLabs\EnterprisePSR3Logger\Handlers\DatabaseHandler;
@@ -75,7 +75,7 @@ $pdo = new PDO('mysql:host=localhost;dbname=app', 'user', 'pass');
 // Create table (one-time setup)
 DatabaseHandler::createTable($pdo, 'logs', 'mysql');
 
-// Create handler
+// Create handler with batching
 $handler = new DatabaseHandler(
     pdo: $pdo,
     table: 'logs',
@@ -94,10 +94,13 @@ $logs = DatabaseHandler::query($pdo, [
 ]);
 ```
 
-**Security:**
+**Features:**
+- Built-in batching (batchSize parameter)
+- Chunked inserts (max 1000 records per INSERT to avoid placeholder limits)
 - Table name validation (blocks system tables)
 - Prepared statements for all queries
-- Multi-row INSERT for better performance
+
+**Note:** Use `batchSize` parameter instead of wrapping with BufferHandler.
 
 ### RedisBufferHandler
 
@@ -131,6 +134,8 @@ $handler = new RedisBufferHandler(
     strategy: 'pubsub'
 );
 ```
+
+**Note:** Redis operations are synchronous (blocking). The handler queues logs for background processing by a worker.
 
 ### WebhookHandler
 
@@ -178,7 +183,7 @@ $handler = new WebhookHandler(
 
 ### TelegramHandler
 
-Send logs to Telegram with rate limiting.
+Send logs to Telegram with TRUE sliding window rate limiting.
 
 ```php
 use AdosLabs\EnterprisePSR3Logger\Handlers\TelegramHandler;
@@ -203,7 +208,7 @@ TelegramHandler::resetRateLimitState();
 ```
 
 **Features:**
-- Rate limiting (default 30/minute)
+- TRUE sliding window rate limiting (uses RateLimiter with Redis support)
 - HTML formatting with emojis
 - Context truncation for large payloads
 - Password visibility toggle in admin UI
@@ -252,62 +257,6 @@ $handler = new GroupHandler([
 ]);
 ```
 
-### BufferHandler
-
-Buffer logs and flush in batches.
-
-```php
-use AdosLabs\EnterprisePSR3Logger\Handlers\BufferHandler;
-
-$handler = new BufferHandler(
-    new DatabaseHandler($pdo),
-    bufferSize: 100,
-    flushOnError: true,
-    flushOnShutdown: true
-);
-
-// Manual flush
-$handler->flush();
-
-// Clear buffer without flushing
-$handler->clear();
-```
-
-## Async Handlers
-
-### AsyncHandler
-
-Non-blocking logging with multiple strategies.
-
-```php
-use AdosLabs\EnterprisePSR3Logger\Handlers\AsyncHandler;
-
-// Shutdown strategy (writes after response)
-$handler = new AsyncHandler(
-    new DatabaseHandler($pdo),
-    strategy: 'shutdown'
-);
-
-// FastCGI strategy (uses fastcgi_finish_request)
-$handler = new AsyncHandler(
-    new WebhookHandler($url),
-    strategy: 'fastcgi'
-);
-
-// Fork strategy (separate process, requires pcntl)
-$handler = new AsyncHandler(
-    new DatabaseHandler($pdo),
-    strategy: 'fork'
-);
-```
-
-**Strategies:**
-| Strategy | When | Pros | Cons |
-|----------|------|------|------|
-| shutdown | Register shutdown handler | Safe, works everywhere | Blocks after response |
-| fastcgi | Use fastcgi_finish_request() | Fast, non-blocking | PHP-FPM only |
-| fork | Fork child process | True async | Requires pcntl, resource inheritance |
-
 ## System Handlers
 
 ### SyslogHandler
@@ -325,7 +274,7 @@ $handler = new SyslogHandler(
 
 ### UdpSyslogHandler
 
-Zero-overhead UDP syslog (fire and forget).
+UDP syslog for high-throughput scenarios.
 
 ```php
 use AdosLabs\EnterprisePSR3Logger\Handlers\UdpSyslogHandler;
@@ -341,8 +290,10 @@ $handler = new UdpSyslogHandler(
 
 **Features:**
 - RFC 5424 compliant
-- Non-blocking UDP (no wait for response)
+- Fire-and-forget UDP (no wait for response)
 - Automatic fallback to file on socket failure
+
+**Warning:** UDP is unreliable - packets may be lost. Use for non-critical metrics only.
 
 ### ErrorLogHandler
 
@@ -361,18 +312,20 @@ $handler = new ErrorLogHandler(Level::Error);
 | StreamHandler | Yes | Yes | Development, simple apps |
 | RotatingFileHandler | Yes | Yes | Production file logging |
 | DatabaseHandler | Yes | Yes | Queryable log storage |
-| RedisBufferHandler | No | Yes | Log aggregation queues |
+| RedisBufferHandler | Yes* | Yes | Log aggregation queues |
 | WebhookHandler | Yes | No | Alert notifications |
 | TelegramHandler | Yes | No | Instant notifications |
 | SyslogHandler | Yes | Yes | System log integration |
-| UdpSyslogHandler | No | No | High-volume logging |
-| AsyncHandler | No | Varies | Wrap slow handlers |
+| UdpSyslogHandler | No | No | High-volume metrics |
+
+*RedisBufferHandler: Operations are synchronous but fast (~0.1ms). Logs are queued for background processing.
 
 ## Best Practices
 
 1. **Use RotatingFileHandler for production** - Prevents disk full
-2. **Wrap slow handlers with AsyncHandler** - Non-blocking writes
+2. **Use DatabaseHandler batchSize** - Built-in batching, no wrapper needed
 3. **Use FilterHandler for level separation** - Separate error.log from info.log
 4. **Use GroupHandler for multiple destinations** - File + Slack + Database
 5. **Set appropriate batch sizes** - DatabaseHandler with batchSize: 100
 6. **Enable compression for rotated files** - Saves disk space
+7. **Use RedisBufferHandler for queue-based logging** - Background worker writes to DB

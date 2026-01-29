@@ -2,7 +2,7 @@
 
 ## Overview
 
-Enterprise PSR-3 Logger has comprehensive test coverage with **202 tests** and **982 assertions**.
+Enterprise PSR-3 Logger has comprehensive test coverage with **198 tests** and **976 assertions**.
 
 ## Test Structure
 
@@ -84,7 +84,6 @@ vendor/bin/phpunit --testdox
 | `testRotatingFileHandlerDailyRotation` | Daily rotation |
 | `testRotatingFileHandlerHourlyRotation` | Hourly rotation |
 | `testFilterHandlerMinLevel` | Level filtering |
-| `testBufferHandlerFlush` | Buffer flushing |
 | `testGroupHandlerMultiple` | Multiple handlers |
 
 ### Formatter Tests (FormatterTest.php)
@@ -103,7 +102,7 @@ vendor/bin/phpunit --testdox
 |------|-------------|
 | `testFullLoggingPipeline` | End-to-end logging |
 | `testMultiChannelSetup` | Multiple channels |
-| `testAsyncHandlerShutdown` | Async with shutdown |
+| `testDatabaseHandlerBatching` | Database batching |
 | `testDatabaseLogging` | PDO handler |
 
 ## Writing New Tests
