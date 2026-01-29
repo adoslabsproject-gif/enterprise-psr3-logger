@@ -123,11 +123,13 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
         $ip = gethostbyname($host);
 
         // If gethostbyname returns the hostname, DNS resolution failed
+        // SECURITY: FAIL CLOSED - Do NOT allow unresolved hostnames
+        // This prevents SSRF via DNS poisoning or timing attacks
         if ($ip === $host && !filter_var($host, FILTER_VALIDATE_IP)) {
-            // Allow the request but log warning - DNS might be temporarily unavailable
-            error_log("[WebhookHandler] Warning: Could not resolve hostname: {$host}");
-
-            return;
+            throw new \InvalidArgumentException(
+                'Webhook URL hostname could not be resolved (DNS failure). ' .
+                'For security, unresolved hostnames are blocked to prevent SSRF attacks.',
+            );
         }
 
         // Block internal/private IP ranges (SSRF protection)

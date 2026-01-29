@@ -357,22 +357,6 @@ class Logger implements LoggerInterface
     // ==================== Private Methods ====================
 
     /**
-     * DEPRECATED: Random sampling is NOT recommended for enterprise applications
-     *
-     * Use configuration-based filtering via should_log() instead.
-     * This method is kept for backward compatibility but should not be used.
-     *
-     * @deprecated Use should_log() global function instead
-     */
-    private function shouldLog(string $level): bool
-    {
-        // ENTERPRISE GALAXY: Sampling is a CAZZATA for production
-        // Use should_log() global function for configuration-based filtering
-        // This method always returns true now (backward compatibility only)
-        return true;
-    }
-
-    /**
      * Check if level is error or above
      */
     private function isErrorLevel(string $level): bool

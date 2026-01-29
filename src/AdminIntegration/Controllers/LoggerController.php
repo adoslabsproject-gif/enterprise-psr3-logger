@@ -1990,8 +1990,18 @@ final class LoggerController extends BaseController
 
         $allowedOrigins = $this->getAllowedCorsOrigins();
 
-        // If wildcard is explicitly configured, allow all
+        // If wildcard is explicitly configured, allow all (NOT RECOMMENDED - logs security warning)
         if (in_array('*', $allowedOrigins, true)) {
+            // Log security warning once per request
+            static $wildcardWarningLogged = false;
+            if (!$wildcardWarningLogged) {
+                error_log(
+                    '[SECURITY WARNING] CORS wildcard (*) is configured for JS error endpoint. ' .
+                    'This allows ANY origin to submit errors. Set JS_ERROR_CORS_ORIGINS to specific domains.',
+                );
+                $wildcardWarningLogged = true;
+            }
+
             return true;
         }
 
