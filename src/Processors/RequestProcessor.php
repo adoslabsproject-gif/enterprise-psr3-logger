@@ -232,6 +232,10 @@ class RequestProcessor implements ProcessorInterface
         // URL (path + query) - use constant for magic number
         $url = $_SERVER['REQUEST_URI'] ?? '';
         if ($url !== '') {
+            // SECURITY: Sanitize URL to prevent log injection attacks
+            // Remove control characters including newlines that could corrupt JSON/JSONL logs
+            $url = preg_replace('/[\x00-\x1F\x7F]/', '', $url) ?? '';
+
             // Truncate very long URLs (use mb_substr for UTF-8 safety)
             if (mb_strlen($url, 'UTF-8') > self::MAX_URL_LENGTH) {
                 $url = mb_substr($url, 0, self::MAX_URL_LENGTH, 'UTF-8') . '...';
@@ -248,6 +252,8 @@ class RequestProcessor implements ProcessorInterface
         // User Agent (use mb_substr for UTF-8 safety)
         if (isset($_SERVER['HTTP_USER_AGENT'])) {
             $userAgent = $_SERVER['HTTP_USER_AGENT'];
+            // SECURITY: Remove control characters to prevent log injection
+            $userAgent = preg_replace('/[\x00-\x1F\x7F]/', '', $userAgent) ?? '';
             if (mb_strlen($userAgent, 'UTF-8') > $this->userAgentMaxLength) {
                 $userAgent = mb_substr($userAgent, 0, $this->userAgentMaxLength, 'UTF-8') . '...';
             }
@@ -257,6 +263,8 @@ class RequestProcessor implements ProcessorInterface
         // Referrer (optional, use mb_substr for UTF-8 safety)
         if (isset($_SERVER['HTTP_REFERER'])) {
             $referrer = $_SERVER['HTTP_REFERER'];
+            // SECURITY: Remove control characters to prevent log injection
+            $referrer = preg_replace('/[\x00-\x1F\x7F]/', '', $referrer) ?? '';
             if (mb_strlen($referrer, 'UTF-8') > self::MAX_REFERRER_LENGTH) {
                 $referrer = mb_substr($referrer, 0, self::MAX_REFERRER_LENGTH, 'UTF-8') . '...';
             }

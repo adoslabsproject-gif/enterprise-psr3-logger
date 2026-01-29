@@ -125,7 +125,20 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
             );
         }
 
+        // SECURITY: Check if host is already an IP address (IPv4 or IPv6)
+        // This handles cases where gethostbyname doesn't work (e.g., IPv6)
+        if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            // IPv6 address - check for internal ranges
+            if ($this->isInternalIPv6($host)) {
+                throw new \InvalidArgumentException(
+                    'Webhook URL uses internal/private IPv6 address (SSRF protection)',
+                );
+            }
+            return; // Valid external IPv6
+        }
+
         // Resolve hostname to IP to check for internal addresses
+        // NOTE: gethostbyname() only works for IPv4, returns hostname if DNS fails
         $ip = gethostbyname($host);
 
         // If gethostbyname returns the hostname, DNS resolution failed
@@ -144,7 +157,7 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
         }
 
         // Block internal/private IP ranges (SSRF protection)
-        if (filter_var($ip, FILTER_VALIDATE_IP)) {
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
             // Use static const for zero-allocation on repeated calls
             static $blockedRanges = [
                 '10.0.0.0/8',       // Private Class A
@@ -171,6 +184,49 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
                 }
             }
         }
+    }
+
+    /**
+     * Check if an IPv6 address is internal/private
+     *
+     * SECURITY: Blocks loopback, link-local, private, and other non-routable IPv6 addresses
+     */
+    private function isInternalIPv6(string $ip): bool
+    {
+        // Normalize IPv6 address
+        $ip = strtolower($ip);
+
+        // Loopback (::1)
+        if ($ip === '::1') {
+            return true;
+        }
+
+        // Link-local (fe80::/10)
+        if (str_starts_with($ip, 'fe8') || str_starts_with($ip, 'fe9') ||
+            str_starts_with($ip, 'fea') || str_starts_with($ip, 'feb')) {
+            return true;
+        }
+
+        // Unique local addresses (fc00::/7) - equivalent to private IPv4
+        if (str_starts_with($ip, 'fc') || str_starts_with($ip, 'fd')) {
+            return true;
+        }
+
+        // IPv4-mapped IPv6 (::ffff:x.x.x.x) - extract IPv4 and check
+        if (str_starts_with($ip, '::ffff:')) {
+            $ipv4Part = substr($ip, 7);
+            if (filter_var($ipv4Part, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                // Recursively check the embedded IPv4
+                return filter_var($ipv4Part, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+            }
+        }
+
+        // Unspecified address (::)
+        if ($ip === '::') {
+            return true;
+        }
+
+        return false;
     }
 
     /**
