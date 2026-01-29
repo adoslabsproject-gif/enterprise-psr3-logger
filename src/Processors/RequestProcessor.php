@@ -41,10 +41,7 @@ class RequestProcessor implements ProcessorInterface
     /** Maximum referrer length */
     private const MAX_REFERRER_LENGTH = 200;
 
-    /** Maximum request ID length (UUID compatible) */
-    private const MAX_REQUEST_ID_LENGTH = 64;
-
-    /** Request ID validation pattern (alphanumeric + hyphen only) */
+    /** Request ID validation pattern (alphanumeric + hyphen only, max 64 chars) */
     private const REQUEST_ID_PATTERN = '/^[a-zA-Z0-9\-]{1,64}$/';
 
     private readonly string $requestIdHeader;

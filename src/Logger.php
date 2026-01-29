@@ -365,15 +365,6 @@ class Logger implements LoggerInterface
     // ==================== Private Methods ====================
 
     /**
-     * Check if level is error or above
-     * Uses cached constant lookup for O(1) performance
-     */
-    private function isErrorLevel(string $level): bool
-    {
-        return isset(self::ERROR_LEVELS[$level]);
-    }
-
-    /**
      * Get stack trace for error logs
      * Optimized: single pass with early exit, no intermediate array
      *

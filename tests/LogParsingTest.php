@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace AdosLabs\EnterprisePSR3Logger\Tests;
 
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 
 /**
  * Tests for log parsing functionality (Nginx, Apache, PHP error logs)

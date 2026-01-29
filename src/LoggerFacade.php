@@ -61,9 +61,9 @@ class LoggerFacade
     /**
      * Set the logger factory
      *
-     * @param callable $factory function(string $channel): Logger
+     * @param \Closure(string): Logger $factory function(string $channel): Logger
      */
-    public static function setLoggerFactory(callable $factory): void
+    public static function setLoggerFactory(\Closure $factory): void
     {
         self::$loggerFactory = $factory;
     }
@@ -84,14 +84,14 @@ class LoggerFacade
                 self::$loggers[$channel] = (self::$loggerFactory)($channel);
             } else {
                 // Try LoggerRegistry first
-                $logger = LoggerRegistry::get($channel);
+                $registeredLogger = LoggerRegistry::get($channel);
 
-                if ($logger === null) {
+                if ($registeredLogger instanceof Logger) {
+                    self::$loggers[$channel] = $registeredLogger;
+                } else {
                     // Create logger with default RotatingFileHandler
-                    $logger = self::createDefaultLogger($channel);
+                    self::$loggers[$channel] = self::createDefaultLogger($channel);
                 }
-
-                self::$loggers[$channel] = $logger;
             }
         }
 
