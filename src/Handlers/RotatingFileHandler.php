@@ -282,8 +282,16 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
     /**
      * Perform rotation with file locking to prevent race conditions
      *
-     * Uses a lock file to coordinate between processes. Only one process
-     * will perform the rotation, others will wait and then use the new file.
+     * MULTI-PROCESS SAFETY:
+     * 1. Uses dedicated lock file for coordination
+     * 2. Non-blocking lock attempt - if another process has lock, we wait
+     * 3. Double-check pattern after acquiring lock
+     * 4. Atomic rename for size-based rotation to prevent data loss
+     *
+     * TOCTOU MITIGATION:
+     * - File locking ensures only one process rotates at a time
+     * - Double-check after lock acquisition catches races
+     * - Atomic rename() prevents partial writes during rotation
      */
     private function rotate(): void
     {
@@ -298,37 +306,80 @@ class RotatingFileHandler extends AbstractProcessingHandler implements HandlerIn
         $lockHandle = @fopen($lockFile, 'c');
 
         if ($lockHandle !== false) {
-            // Try to get exclusive lock (non-blocking)
+            // Try to get exclusive lock (non-blocking first)
             if (flock($lockHandle, LOCK_EX | LOCK_NB)) {
                 try {
-                    // Double-check rotation is still needed (another process may have done it)
-                    if ($this->currentFilename !== null && file_exists($this->currentFilename)) {
-                        clearstatcache(true, $this->currentFilename);
-                        $size = @filesize($this->currentFilename);
-
-                        // Only compress if file still exists and is large enough
-                        if ($this->compress && $size !== false && $size > 0) {
-                            $this->compressFile($this->currentFilename);
-                        }
-                    }
-
-                    // Clean up old files
-                    if ($this->maxFiles > 0) {
-                        $this->cleanOldFiles();
-                    }
+                    $this->performRotationUnderLock();
                 } finally {
                     flock($lockHandle, LOCK_UN);
                     fclose($lockHandle);
                 }
             } else {
-                // Another process is rotating, just wait briefly and continue
+                // Another process is rotating - wait for lock (blocking)
+                // This ensures we don't proceed until rotation is complete
+                if (flock($lockHandle, LOCK_EX)) {
+                    // Rotation done by other process, just release lock
+                    flock($lockHandle, LOCK_UN);
+                }
                 fclose($lockHandle);
-                usleep(10000); // 10ms
             }
         }
 
         $this->currentFilename = null;
         $this->currentFileSize = 0;
+    }
+
+    /**
+     * Perform actual rotation while holding exclusive lock
+     */
+    private function performRotationUnderLock(): void
+    {
+        if ($this->currentFilename === null || !file_exists($this->currentFilename)) {
+            return;
+        }
+
+        clearstatcache(true, $this->currentFilename);
+        $size = @filesize($this->currentFilename);
+
+        // For size-based rotation, use atomic rename to timestamped file
+        if ($this->maxFileSize > 0 && $size !== false && $size >= $this->maxFileSize) {
+            $rotatedName = $this->generateRotatedFilename($this->currentFilename);
+
+            // Atomic rename - prevents data loss during rotation
+            if (@rename($this->currentFilename, $rotatedName)) {
+                // Compress the rotated file (not the current one)
+                if ($this->compress) {
+                    $this->compressFile($rotatedName);
+                }
+            }
+        } elseif ($this->compress && $size !== false && $size > 0) {
+            // Date-based rotation - compress in place
+            $this->compressFile($this->currentFilename);
+        }
+
+        // Clean up old files
+        if ($this->maxFiles > 0) {
+            $this->cleanOldFiles();
+        }
+    }
+
+    /**
+     * Generate unique rotated filename with microsecond precision
+     *
+     * Format: app-2024-01-15-143052-123456.log
+     * This prevents collisions when multiple processes rotate simultaneously.
+     */
+    private function generateRotatedFilename(string $currentFilename): string
+    {
+        $info = pathinfo($currentFilename);
+        $dir = $info['dirname'] ?? '.';
+        $basename = $info['filename'] ?? 'log';
+        $extension = isset($info['extension']) ? '.' . $info['extension'] : '';
+
+        // Use microtime for uniqueness
+        $timestamp = date('Y-m-d-His') . '-' . substr((string) hrtime(true), -6);
+
+        return "{$dir}/{$basename}-{$timestamp}{$extension}";
     }
 
     /**

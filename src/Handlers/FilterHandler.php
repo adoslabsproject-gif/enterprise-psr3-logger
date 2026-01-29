@@ -14,6 +14,14 @@ use Monolog\LogRecord;
  * Wraps another handler and filters records based on level range or custom criteria.
  * Useful for routing different log levels to different destinations.
  *
+ * BUBBLE SEMANTICS (important for handler chains):
+ * - Record MATCHES filter → handled by wrapped handler, then respects $bubble setting
+ * - Record DOESN'T MATCH → ALWAYS bubbles (returns true) so other handlers can process
+ *
+ * This design ensures that when you have multiple FilterHandlers in a chain,
+ * each one only handles its matching records, but non-matching records continue
+ * to the next handler.
+ *
  * USAGE:
  * ```php
  * // Only handle INFO and WARNING (not DEBUG, not ERROR+)
@@ -23,26 +31,30 @@ use Monolog\LogRecord;
  *     maxLevel: Level::Warning
  * );
  *
- * // With custom filter
+ * // With custom filter (e.g., slow queries)
  * $handler = new FilterHandler(
  *     new StreamHandler('/var/log/slow-queries.log'),
  *     filter: fn(LogRecord $record) => ($record->context['duration_ms'] ?? 0) > 1000
  * );
  * ```
  *
- * EXAMPLE SETUP for log separation:
+ * COMPLETE LOG SEPARATION EXAMPLE:
  * ```php
+ * // Error+ goes to error.log (and stops if bubble=false)
  * $logger->addHandler(new FilterHandler(
  *     new StreamHandler('/var/log/error.log'),
- *     minLevel: Level::Error
+ *     minLevel: Level::Error,
+ *     bubble: false  // Don't send errors to info.log too
  * ));
  *
+ * // Info to Warning goes to info.log
  * $logger->addHandler(new FilterHandler(
  *     new StreamHandler('/var/log/info.log'),
  *     minLevel: Level::Info,
  *     maxLevel: Level::Warning
  * ));
  *
+ * // Debug only goes to debug.log
  * $logger->addHandler(new FilterHandler(
  *     new StreamHandler('/var/log/debug.log'),
  *     minLevel: Level::Debug,
@@ -50,16 +62,16 @@ use Monolog\LogRecord;
  * ));
  * ```
  */
-class FilterHandler implements HandlerInterface
+final class FilterHandler implements HandlerInterface
 {
-    private HandlerInterface $handler;
-    private Level $minLevel;
-    private ?Level $maxLevel;
+    private readonly HandlerInterface $handler;
+    private readonly Level $minLevel;
+    private readonly ?Level $maxLevel;
 
-    /** @var callable|null */
+    /** @var (callable(LogRecord): bool)|null Custom filter function */
     private $filter;
 
-    private bool $bubble;
+    private readonly bool $bubble;
 
     /**
      * @param HandlerInterface $handler Handler to wrap
