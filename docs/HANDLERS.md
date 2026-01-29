@@ -181,6 +181,11 @@ $handler = new WebhookHandler(
 - Localhost blocked in production
 - HTTPS required (HTTP only for localhost in dev)
 
+**Implementation:**
+- Uses CURL when available for reliable timeouts (separate connect and total timeout)
+- Fallback to file_get_contents for environments without CURL
+- No redirect following (security)
+
 ### TelegramHandler
 
 Send logs to Telegram with TRUE sliding window rate limiting.

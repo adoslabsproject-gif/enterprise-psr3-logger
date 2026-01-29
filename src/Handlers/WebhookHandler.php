@@ -439,6 +439,15 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
     /**
      * Send HTTP request to webhook
      *
+     * IMPLEMENTATION: Uses CURL when available for reliable timeouts.
+     * Falls back to file_get_contents for environments without CURL.
+     *
+     * WHY CURL:
+     * - file_get_contents timeout is unreliable (may not honor connect timeout)
+     * - CURL has separate connect_timeout and timeout options
+     * - Better error reporting
+     * - Industry standard for HTTP in PHP
+     *
      * @param array<string, mixed> $payload
      */
     private function sendRequest(array $payload): void
@@ -451,6 +460,74 @@ class WebhookHandler extends AbstractProcessingHandler implements HandlerInterfa
             return;
         }
 
+        // Use CURL if available (preferred for reliable timeouts)
+        if (function_exists('curl_init')) {
+            $this->sendWithCurl($json);
+
+            return;
+        }
+
+        // Fallback to file_get_contents
+        $this->sendWithFileGetContents($json);
+    }
+
+    /**
+     * Send request using CURL (preferred method)
+     *
+     * @param string $json JSON payload
+     */
+    private function sendWithCurl(string $json): void
+    {
+        $ch = curl_init($this->url);
+
+        if ($ch === false) {
+            error_log('WebhookHandler: Failed to initialize CURL');
+
+            return;
+        }
+
+        $headers = ['Content-Type: application/json'];
+        foreach ($this->headers as $name => $value) {
+            $headers[] = "{$name}: {$value}";
+        }
+
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $json,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => min($this->timeout, 5), // Connect timeout (max 5s)
+            CURLOPT_TIMEOUT => $this->timeout,                // Total timeout
+            CURLOPT_SSL_VERIFYPEER => $this->verifySSL,
+            CURLOPT_SSL_VERIFYHOST => $this->verifySSL ? 2 : 0,
+            CURLOPT_FOLLOWLOCATION => false, // Security: don't follow redirects
+            CURLOPT_MAXREDIRS => 0,
+        ]);
+
+        $result = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $error = curl_error($ch);
+        curl_close($ch);
+
+        if ($result === false) {
+            error_log('WebhookHandler: CURL request failed - ' . $error);
+
+            return;
+        }
+
+        // Log non-2xx responses (but don't throw - logging should be fire-and-forget)
+        if ($httpCode < 200 || $httpCode >= 300) {
+            error_log("WebhookHandler: HTTP {$httpCode} response from webhook");
+        }
+    }
+
+    /**
+     * Send request using file_get_contents (fallback)
+     *
+     * @param string $json JSON payload
+     */
+    private function sendWithFileGetContents(string $json): void
+    {
         $headers = array_merge(
             ['Content-Type' => 'application/json'],
             $this->headers,

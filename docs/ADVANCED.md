@@ -336,6 +336,11 @@ $manager->setGlobalContext(['app_version' => '1.2.3']);
 $manager->closeAll();
 ```
 
+**PERFORMANCE: Inheritance Cache**
+
+LoggerManager caches inherited handlers/processors to avoid repeated string parsing.
+Cache is automatically invalidated when configuration changes.
+
 ## Admin Panel Integration
 
 ### LoggerAdminModule

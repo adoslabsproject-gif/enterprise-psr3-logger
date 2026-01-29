@@ -69,6 +69,19 @@ class LoggerManager
     private array $globalContext = [];
 
     /**
+     * PERFORMANCE: Cache for inherited handlers to avoid repeated explode/loop
+     * Invalidated when channelHandlers or defaultHandlers change
+     * @var array<string, array<HandlerInterface>>
+     */
+    private array $inheritedHandlersCache = [];
+
+    /**
+     * PERFORMANCE: Cache for inherited processors
+     * @var array<string, array<ProcessorInterface|callable>>
+     */
+    private array $inheritedProcessorsCache = [];
+
+    /**
      * Get or create a logger for a channel
      *
      * @param string $channel Channel name
@@ -103,6 +116,7 @@ class LoggerManager
     public function setDefaultHandler(HandlerInterface $handler): self
     {
         $this->defaultHandlers = [$handler];
+        $this->invalidateInheritanceCache();
 
         return $this;
     }
@@ -116,6 +130,7 @@ class LoggerManager
     public function addDefaultHandler(HandlerInterface $handler): self
     {
         $this->defaultHandlers[] = $handler;
+        $this->invalidateInheritanceCache();
 
         return $this;
     }
@@ -129,6 +144,7 @@ class LoggerManager
     public function addDefaultProcessor(ProcessorInterface|callable $processor): self
     {
         $this->defaultProcessors[] = $processor;
+        $this->invalidateInheritanceCache();
 
         return $this;
     }
@@ -143,6 +159,7 @@ class LoggerManager
     public function setChannelHandlers(string $channel, array $handlers): self
     {
         $this->channelHandlers[$channel] = $handlers;
+        $this->invalidateInheritanceCache();
 
         // Close and reconfigure existing logger if already created
         if (isset($this->loggers[$channel])) {
@@ -168,6 +185,7 @@ class LoggerManager
         }
 
         $this->channelHandlers[$channel][] = $handler;
+        $this->invalidateInheritanceCache();
 
         // Update existing logger if already created
         if (isset($this->loggers[$channel])) {
@@ -191,6 +209,7 @@ class LoggerManager
         }
 
         $this->channelProcessors[$channel][] = $processor;
+        $this->invalidateInheritanceCache();
 
         // Update existing logger if already created
         if (isset($this->loggers[$channel])) {
@@ -286,11 +305,19 @@ class LoggerManager
     /**
      * Get handlers for a channel, including inherited from parent channels
      *
+     * PERFORMANCE: Results are cached to avoid repeated string parsing
+     * Cache is invalidated when handlers are modified
+     *
      * @param string $channel
      * @return array<HandlerInterface>
      */
     private function getInheritedHandlers(string $channel): array
     {
+        // Check cache first (O(1) lookup)
+        if (isset($this->inheritedHandlersCache[$channel])) {
+            return $this->inheritedHandlersCache[$channel];
+        }
+
         $handlers = [];
 
         // Check parent channels (e.g., 'app.http' inherits from 'app')
@@ -301,7 +328,7 @@ class LoggerManager
             $parentChannel = $parentChannel ? $parentChannel . '.' . $part : $part;
 
             if (isset($this->channelHandlers[$parentChannel])) {
-                $handlers = array_merge($handlers, $this->channelHandlers[$parentChannel]);
+                $handlers = [...$handlers, ...$this->channelHandlers[$parentChannel]];
             }
         }
 
@@ -310,17 +337,28 @@ class LoggerManager
             $handlers = $this->defaultHandlers;
         }
 
+        // Cache result
+        $this->inheritedHandlersCache[$channel] = $handlers;
+
         return $handlers;
     }
 
     /**
      * Get processors for a channel, including inherited from parent channels
      *
+     * PERFORMANCE: Results are cached to avoid repeated string parsing
+     * Cache is invalidated when processors are modified
+     *
      * @param string $channel
      * @return array<ProcessorInterface|callable>
      */
     private function getInheritedProcessors(string $channel): array
     {
+        // Check cache first (O(1) lookup)
+        if (isset($this->inheritedProcessorsCache[$channel])) {
+            return $this->inheritedProcessorsCache[$channel];
+        }
+
         $processors = $this->defaultProcessors;
 
         // Check parent channels
@@ -331,10 +369,25 @@ class LoggerManager
             $parentChannel = $parentChannel ? $parentChannel . '.' . $part : $part;
 
             if (isset($this->channelProcessors[$parentChannel])) {
-                $processors = array_merge($processors, $this->channelProcessors[$parentChannel]);
+                $processors = [...$processors, ...$this->channelProcessors[$parentChannel]];
             }
         }
 
+        // Cache result
+        $this->inheritedProcessorsCache[$channel] = $processors;
+
         return $processors;
+    }
+
+    /**
+     * Invalidate inheritance cache when configuration changes
+     *
+     * PERFORMANCE: Full cache clear is simple and safe.
+     * Only called on config changes (rare), not on logging (hot path).
+     */
+    private function invalidateInheritanceCache(): void
+    {
+        $this->inheritedHandlersCache = [];
+        $this->inheritedProcessorsCache = [];
     }
 }

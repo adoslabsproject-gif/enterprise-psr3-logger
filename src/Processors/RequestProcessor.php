@@ -44,13 +44,29 @@ class RequestProcessor implements ProcessorInterface
     /** Request ID validation pattern (alphanumeric + hyphen only, max 64 chars) */
     private const REQUEST_ID_PATTERN = '/^[a-zA-Z0-9\-]{1,64}$/';
 
+    /** Cache TTL in seconds for shared request cache */
+    private const SHARED_CACHE_TTL = 1;
+
     private readonly string $requestIdHeader;
     private readonly bool $anonymizeIp;
     private readonly int $userAgentMaxLength;
     private ?string $cachedRequestId = null;
 
-    /** @var array<string, mixed>|null Cached request data */
+    /**
+     * SHARED cache across all RequestProcessor instances
+     * This eliminates redundant $_SERVER parsing when multiple loggers exist
+     * @var array<string, mixed>|null
+     */
+    private static ?array $sharedRequestCache = null;
+
+    /** Timestamp when shared cache was last built */
+    private static int $sharedCacheTime = 0;
+
+    /** @var array<string, mixed>|null Instance-specific cached request data (for custom settings) */
     private ?array $cachedData = null;
+
+    /** Whether this instance uses custom settings that differ from defaults */
+    private bool $hasCustomSettings = false;
 
     /**
      * @var array<string> List of trusted proxy headers for IP detection.
@@ -93,31 +109,57 @@ class RequestProcessor implements ProcessorInterface
         // User must explicitly enable proxy header trust
         if ($trustProxyHeaders && $trustedProxyHeaders !== null) {
             $this->trustedProxyHeaders = $trustedProxyHeaders;
+            $this->hasCustomSettings = true;
         } else {
             // Safe default: only trust direct connection IP
             $this->trustedProxyHeaders = ['REMOTE_ADDR'];
+        }
+
+        // Check if custom settings differ from defaults
+        if ($anonymizeIp || $userAgentMaxLength !== 200 || $requestIdHeader !== 'X-Request-ID') {
+            $this->hasCustomSettings = true;
         }
     }
 
     /**
      * Process log record
+     *
+     * Uses shared static cache across all instances for maximum performance.
+     * Multiple loggers with RequestProcessor share the same $_SERVER parsing result.
      */
     public function __invoke(LogRecord $record): LogRecord
     {
         // Only process in web context
         if (PHP_SAPI === 'cli') {
-            return $record->with(extra: array_merge($record->extra, [
-                'request_id' => $this->getRequestId(),
-                'sapi' => 'cli',
-            ]));
+            return $record->with(extra: [...$record->extra, 'request_id' => $this->getRequestId(), 'sapi' => 'cli']);
         }
 
-        // Use cached data for performance
-        if ($this->cachedData === null) {
-            $this->cachedData = $this->buildRequestData();
+        // For instances with custom settings, use instance cache
+        if ($this->hasCustomSettings) {
+            if ($this->cachedData === null) {
+                $this->cachedData = $this->buildRequestData();
+            }
+
+            return $record->with(extra: [...$record->extra, ...$this->cachedData]);
         }
 
-        return $record->with(extra: array_merge($record->extra, $this->cachedData));
+        // Use SHARED cache for default-configured instances (common case)
+        $now = time();
+        if (self::$sharedRequestCache === null || ($now - self::$sharedCacheTime) > self::SHARED_CACHE_TTL) {
+            self::$sharedRequestCache = $this->buildRequestData();
+            self::$sharedCacheTime = $now;
+        }
+
+        return $record->with(extra: [...$record->extra, ...self::$sharedRequestCache]);
+    }
+
+    /**
+     * Reset shared cache (for long-running processes between requests)
+     */
+    public static function resetSharedCache(): void
+    {
+        self::$sharedRequestCache = null;
+        self::$sharedCacheTime = 0;
     }
 
     /**
@@ -253,20 +295,40 @@ class RequestProcessor implements ProcessorInterface
 
     /**
      * Anonymize IP address (replace last octet with 0)
+     *
+     * SECURITY: Fail-safe design - if parsing fails, returns safe placeholder
+     * instead of leaking the original IP address.
      */
     private function anonymizeIpAddress(string $ip): string
     {
-        // IPv4
+        // IPv4 - use explode for guaranteed safe anonymization
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            return preg_replace('/\.\d+$/', '.0', $ip) ?? $ip;
+            $parts = explode('.', $ip);
+            if (count($parts) === 4) {
+                $parts[3] = '0';
+
+                return implode('.', $parts);
+            }
+
+            // Parsing failed - return safe placeholder, NOT the original IP
+            return '0.0.0.0';
         }
 
         // IPv6 - replace last segment
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
-            return preg_replace('/:[^:]+$/', ':0', $ip) ?? $ip;
+            $parts = explode(':', $ip);
+            if (!empty($parts)) {
+                $parts[count($parts) - 1] = '0';
+
+                return implode(':', $parts);
+            }
+
+            // Parsing failed - return safe placeholder
+            return '::0';
         }
 
-        return $ip;
+        // Unknown format - return marker, NOT the original IP
+        return '[ANONYMIZED]';
     }
 
     /**

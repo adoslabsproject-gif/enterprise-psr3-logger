@@ -278,6 +278,12 @@ class Logger implements LoggerInterface
             return; // Exit immediately - zero overhead
         }
 
+        // 🔥 SAMPLING: Apply probabilistic sampling for high-volume logs
+        // CRITICAL: Error levels NEVER sampled - always logged for reliability
+        if (!isset(self::ERROR_LEVELS[$level]) && !$this->shouldSample($level)) {
+            return; // Sampled out - zero overhead
+        }
+
         // Merge global context using spread operator (faster than array_merge)
         $mergedContext = [...$this->globalContext, ...$context];
 
@@ -363,6 +369,38 @@ class Logger implements LoggerInterface
     }
 
     // ==================== Private Methods ====================
+
+    /**
+     * Check if this log entry should be sampled (included)
+     *
+     * SAMPLING STRATEGY:
+     * - Per-level rates take precedence over global rate
+     * - Returns true = log should be written
+     * - Returns false = log should be skipped (sampled out)
+     * - Uses mt_rand for speed (cryptographic randomness not needed)
+     *
+     * @param string $level PSR-3 log level
+     * @return bool True if log should be included
+     */
+    private function shouldSample(string $level): bool
+    {
+        // Determine which sampling rate to use
+        $rate = $this->levelSamplingRates[$level] ?? $this->samplingRate;
+
+        // Fast path: rate = 1.0 means log everything
+        if ($rate >= 1.0) {
+            return true;
+        }
+
+        // Fast path: rate = 0.0 means log nothing (but this should rarely be configured)
+        if ($rate <= 0.0) {
+            return false;
+        }
+
+        // Probabilistic sampling using integer math (faster than float comparison)
+        // mt_rand(1, 1000) / 1000 gives us 0.1% precision
+        return mt_rand(1, 1000) <= (int) ($rate * 1000);
+    }
 
     /**
      * Get stack trace for error logs
