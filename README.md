@@ -997,6 +997,11 @@ This package has the following limitations:
 - **Rate limiting**: API endpoints protected against abuse (configurable limits)
 - **AES-256-GCM encryption**: Telegram bot tokens encrypted at rest when APP_KEY is set
 - **CSP compliance**: No inline scripts or styles in admin views
+- **XSS protection**: All output escaped with `esc()` helper (ENT_QUOTES | ENT_HTML5 | UTF-8)
+- **CORS origin validation**: JS error endpoint validates origins (configurable via `JS_ERROR_CORS_ORIGINS`)
+- **System table protection**: DatabaseHandler blocks pg_, mysql., information_schema, sys., sqlite_ prefixes
+- **CSPRNG**: Rate limiter uses `random_bytes()` for cryptographically secure unique IDs
+- **Multi-row INSERT**: Batch database logging uses single INSERT for better performance
 
 ## Framework Compatibility
 
