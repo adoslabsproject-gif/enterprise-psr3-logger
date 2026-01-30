@@ -199,6 +199,7 @@ class LoggerFacade
             date_default_timezone_set($timezone);
         } catch (\Throwable $e) {
             // Fallback to default on any error
+            error_log('LoggerFacade: Invalid timezone "' . $timezone . '", falling back to ' . self::DEFAULT_TIMEZONE);
             date_default_timezone_set(self::DEFAULT_TIMEZONE);
         }
     }

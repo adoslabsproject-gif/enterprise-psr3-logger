@@ -170,6 +170,30 @@
     gap: 10px;
 }
 
+.eap-logger-channel-card__level-row--db {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--eap-border, #30363d);
+}
+
+.eap-logger-channel-card__level-row--db .eap-logger-channel-card__level-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.eap-logger-channel-card__level-row--db .eap-logger-channel-card__level-label svg {
+    opacity: 0.7;
+}
+
+.eap-logger-channel-card__db-hint {
+    font-size: 11px;
+    color: var(--eap-text-muted, #6e7681);
+    margin-top: 6px;
+    padding-left: 2px;
+    line-height: 1.4;
+}
+
 .eap-logger-channel-card__level-label {
     font-size: 12px;
     color: var(--eap-text-muted, #6e7681);
@@ -1946,4 +1970,274 @@
 
 .eap-input-password-toggle .hidden {
     display: none;
+}
+
+/* ==========================================================================
+   Security Log Viewer (Database)
+   ========================================================================== */
+
+.eap-logger-filters-card {
+    margin-bottom: 1.5rem;
+}
+
+.eap-logger-filters__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+}
+
+.eap-logger-filters__group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.eap-logger-filters__group--search {
+    flex: 1;
+    min-width: 200px;
+}
+
+.eap-logger-filters__group--actions {
+    display: flex;
+    flex-direction: row;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.eap-logger-security-table {
+    font-size: 0.875rem;
+}
+
+.eap-logger-security-timestamp code {
+    font-size: 0.75rem;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-security-message {
+    max-width: 400px;
+    word-break: break-word;
+}
+
+.eap-logger-request-id {
+    font-size: 0.7rem;
+    background: var(--eap-bg-secondary, #161b22);
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+}
+
+.eap-logger-security-details {
+    background: var(--eap-bg-secondary, #161b22);
+}
+
+.eap-logger-security-details.hidden {
+    display: none;
+}
+
+.eap-logger-security-details-content {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.eap-logger-detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.eap-logger-detail-section strong {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--eap-text-muted, #6e7681);
+    letter-spacing: 0.05em;
+}
+
+.eap-logger-pre {
+    background: var(--eap-bg-primary, #0d1117);
+    border: 1px solid var(--eap-border, #30363d);
+    border-radius: 4px;
+    padding: 0.75rem;
+    margin: 0;
+    font-size: 0.75rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.eap-logger-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.75rem;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-detail-meta strong {
+    display: inline;
+    text-transform: none;
+    font-weight: 600;
+}
+
+/* DB Level Configuration Card */
+.eap-logger-db-level-card {
+    margin-bottom: 1rem;
+    border: 1px solid var(--eap-neon-cyan, #22d3ee);
+    background: rgba(34, 211, 238, 0.05);
+}
+
+.eap-logger-db-level-config {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.eap-logger-db-level-config__info {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.eap-logger-db-level-config__info svg {
+    color: var(--eap-neon-cyan, #22d3ee);
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+}
+
+.eap-logger-db-level-config__info strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: var(--eap-text-primary, #e6edf3);
+}
+
+.eap-logger-db-level-config__info p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-db-level-config__control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.eap-logger-db-level-config__control select {
+    min-width: 120px;
+}
+
+.eap-logger-db-level-status {
+    font-size: 0.75rem;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-db-level-status--success {
+    color: var(--eap-success, #3fb950);
+}
+
+.eap-logger-db-level-status--error {
+    color: var(--eap-danger, #f85149);
+}
+
+@media (max-width: 768px) {
+    .eap-logger-db-level-config {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .eap-logger-db-level-config__control {
+        width: 100%;
+    }
+
+    .eap-logger-db-level-config__control select {
+        flex: 1;
+    }
+}
+
+/* Attacker Identification Section */
+.eap-logger-detail-attacker {
+    background: rgba(255, 0, 0, 0.05);
+    border: 1px solid rgba(255, 0, 0, 0.2);
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.eap-logger-attacker-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.eap-logger-attacker-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.eap-logger-attacker-item--full {
+    grid-column: 1 / -1;
+}
+
+.eap-logger-attacker-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    color: var(--eap-text-muted, #6e7681);
+    font-weight: 500;
+}
+
+.eap-logger-attacker-item code,
+.eap-logger-attacker-item span:not(.eap-logger-attacker-label) {
+    font-size: 0.85rem;
+    color: var(--eap-text-primary, #e6edf3);
+}
+
+.eap-logger-ua {
+    font-size: 0.75rem !important;
+    word-break: break-all;
+    max-height: 3em;
+    overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .eap-logger-attacker-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+.eap-logger-expand-btn svg {
+    transition: transform 0.2s ease;
+}
+
+.eap-logger-expand-btn--expanded svg {
+    transform: rotate(180deg);
+}
+
+.eap-logger-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+    padding: 1rem 0;
+}
+
+.eap-logger-pagination__info {
+    font-size: 0.875rem;
+    color: var(--eap-text-muted, #6e7681);
+}
+
+.eap-logger-pagination__controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.eap-logger-pagination__page {
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
 }

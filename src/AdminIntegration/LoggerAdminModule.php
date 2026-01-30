@@ -111,6 +111,12 @@ final class LoggerAdminModule implements AdminModuleInterface
                         'icon' => 'activity',
                     ],
                     [
+                        'id' => 'logger-security',
+                        'label' => 'Security Log',
+                        'url' => '/logger/security',
+                        'icon' => 'shield',
+                    ],
+                    [
                         'id' => 'logger-telegram',
                         'label' => 'Telegram',
                         'url' => '/logger/telegram',
@@ -133,6 +139,9 @@ final class LoggerAdminModule implements AdminModuleInterface
 
             // View specific log file
             ['method' => 'GET', 'path' => '/logger/view', 'handler' => [$controller, 'viewFile']],
+
+            // Security log database viewer
+            ['method' => 'GET', 'path' => '/logger/security', 'handler' => [$controller, 'securityLog']],
 
             // Channel configuration (AJAX)
             ['method' => 'POST', 'path' => '/logger/channel/update', 'handler' => [$controller, 'updateChannel']],
@@ -165,8 +174,10 @@ final class LoggerAdminModule implements AdminModuleInterface
     {
         $this->logger->info('Installing PSR3 Logger admin module');
 
-        // Create logs table if not exists
-        $this->createLogsTable();
+        // NOTE: Tables created by migrations in enterprise-admin-panel:
+        // - log_channels: channel configuration
+        // - log_telegram_config: Telegram notification settings
+        // - security_log: audit trail for security channel (DatabaseHandler compatible)
 
         // Run migration to create config entries
         $this->runMigration();
@@ -218,106 +229,9 @@ final class LoggerAdminModule implements AdminModuleInterface
         ];
     }
 
-    /**
-     * Create the logs table with proper indexes
-     */
-    private function createLogsTable(): void
-    {
-        // Detect driver
-        $driver = $this->getDriverName();
-
-        $sql = match ($driver) {
-            'pgsql' => <<<SQL
-                    CREATE TABLE IF NOT EXISTS logs (
-                        id BIGSERIAL PRIMARY KEY,
-                        channel VARCHAR(100) NOT NULL,
-                        level VARCHAR(20) NOT NULL,
-                        level_value SMALLINT NOT NULL DEFAULT 0,
-                        message TEXT NOT NULL,
-                        context JSONB DEFAULT '{}'::JSONB,
-                        extra JSONB DEFAULT '{}'::JSONB,
-                        request_id VARCHAR(64),
-                        user_id BIGINT,
-                        ip_address VARCHAR(45),
-                        user_agent TEXT,
-                        created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    );
-
-                    CREATE INDEX IF NOT EXISTS idx_logs_channel ON logs(channel);
-                    CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level_value);
-                    CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at DESC);
-                    CREATE INDEX IF NOT EXISTS idx_logs_request_id ON logs(request_id);
-                    CREATE INDEX IF NOT EXISTS idx_logs_user_id ON logs(user_id);
-                    CREATE INDEX IF NOT EXISTS idx_logs_channel_time ON logs(channel, created_at DESC);
-                    CREATE INDEX IF NOT EXISTS idx_logs_level_time ON logs(level_value, created_at DESC);
-                    CREATE INDEX IF NOT EXISTS idx_logs_channel_level_time ON logs(channel, level_value, created_at DESC);
-                    CREATE INDEX IF NOT EXISTS idx_logs_ip ON logs(ip_address) WHERE ip_address IS NOT NULL;
-                    CREATE INDEX IF NOT EXISTS idx_logs_context ON logs USING GIN (context jsonb_path_ops);
-                SQL,
-
-            'mysql' => <<<SQL
-                    CREATE TABLE IF NOT EXISTS logs (
-                        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                        channel VARCHAR(100) NOT NULL,
-                        level VARCHAR(20) NOT NULL,
-                        level_value SMALLINT NOT NULL DEFAULT 0,
-                        message TEXT NOT NULL,
-                        context JSON DEFAULT NULL,
-                        extra JSON DEFAULT NULL,
-                        request_id VARCHAR(64),
-                        user_id BIGINT UNSIGNED,
-                        ip_address VARCHAR(45),
-                        user_agent TEXT,
-                        created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-
-                        INDEX idx_logs_channel (channel),
-                        INDEX idx_logs_level (level_value),
-                        INDEX idx_logs_created_at (created_at),
-                        INDEX idx_logs_request_id (request_id),
-                        INDEX idx_logs_user_id (user_id),
-                        INDEX idx_logs_channel_time (channel, created_at),
-                        INDEX idx_logs_level_time (level_value, created_at),
-                        INDEX idx_logs_channel_level_time (channel, level_value, created_at)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                SQL,
-
-            'sqlite' => <<<SQL
-                    CREATE TABLE IF NOT EXISTS logs (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        channel VARCHAR(100) NOT NULL,
-                        level VARCHAR(20) NOT NULL,
-                        level_value INTEGER NOT NULL DEFAULT 0,
-                        message TEXT NOT NULL,
-                        context TEXT DEFAULT '{}',
-                        extra TEXT DEFAULT '{}',
-                        request_id VARCHAR(64),
-                        user_id INTEGER,
-                        ip_address VARCHAR(45),
-                        user_agent TEXT,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    );
-
-                    CREATE INDEX IF NOT EXISTS idx_logs_channel ON logs(channel);
-                    CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level_value);
-                    CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
-                SQL,
-
-            default => throw new \RuntimeException("Unsupported database driver: {$driver}"),
-        };
-
-        try {
-            // Execute multiple statements
-            $statements = array_filter(array_map('trim', explode(';', $sql)));
-            foreach ($statements as $statement) {
-                if (!empty($statement)) {
-                    $this->exec($statement);
-                }
-            }
-            $this->logger->info('Logs table created/verified');
-        } catch (\PDOException|\Exception $e) {
-            $this->logger->error('Failed to create logs table', ['error' => $e->getMessage()]);
-        }
-    }
+    // NOTE: Tables are created by enterprise-admin-panel migrations:
+    // - log_channels, log_telegram_config: config tables
+    // - security_log: audit trail for security channel (only channel with DB logging)
 
     private function runMigration(): void
     {

@@ -34,6 +34,9 @@ $icons = [
     'send' => '<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
     'clock' => '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     'check' => '<polyline points="20 6 9 17 4 12"/>',
+    'code' => '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
+    'server' => '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+    'file-text' => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
 ];
 
 $getIcon = fn ($icon) => $icons[$icon] ?? $icons['box'];
@@ -131,10 +134,13 @@ $debugLevels = ['debug', 'info', 'notice'];
         // Get allowed levels for this channel (null = all levels allowed)
         $allowedLevels = $channel['allowed_levels'] ?? null;
         $channelLevels = $allowedLevels !== null ? $allowedLevels : $levels;
+        // Check if this channel has database handler
+        $hasDbHandler = in_array('database', $channel['handlers'] ?? []);
+        $dbMinLevel = $channel['config']['db_min_level'] ?? $channel['level'];
         ?>
         <div class="eap-logger-channel-card__controls">
             <div class="eap-logger-channel-card__level-row">
-                <label class="eap-logger-channel-card__level-label">Min Level:</label>
+                <label class="eap-logger-channel-card__level-label"><?= $hasDbHandler ? 'File Level:' : 'Min Level:' ?></label>
                 <select class="eap-logger-channel-card__level-select channel-level"
                         data-channel="<?= esc($key) ?>"
                         data-original="<?= esc($channel['level']) ?>">
@@ -155,6 +161,40 @@ $debugLevels = ['debug', 'info', 'notice'];
                     Save
                 </button>
             </div>
+
+            <?php if ($hasDbHandler): ?>
+            <!-- Database Level Selector (separate from file level) -->
+            <div class="eap-logger-channel-card__level-row eap-logger-channel-card__level-row--db">
+                <label class="eap-logger-channel-card__level-label">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <?= $getIcon('database') ?>
+                    </svg>
+                    DB Level:
+                </label>
+                <select class="eap-logger-channel-card__level-select channel-db-level"
+                        data-channel="<?= esc($key) ?>"
+                        data-original="<?= esc($dbMinLevel) ?>">
+                    <?php foreach ($channelLevels as $level): ?>
+                    <option value="<?= $level ?>" <?= $dbMinLevel === $level ? 'selected' : '' ?>>
+                        <?= ucfirst($level) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+
+                <!-- Save Button for DB level -->
+                <button type="button"
+                        class="eap-btn eap-btn--primary eap-btn--sm channel-db-save-btn hidden"
+                        data-channel="<?= esc($key) ?>">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <?= $getIcon('check') ?>
+                    </svg>
+                    Save
+                </button>
+            </div>
+            <p class="eap-logger-channel-card__db-hint">
+                File and database can have different log levels. DB level controls what gets written to security_log table.
+            </p>
+            <?php endif; ?>
         </div>
 
         <!-- Auto-Reset Toggle (shown for debug levels < WARNING, hidden otherwise) -->

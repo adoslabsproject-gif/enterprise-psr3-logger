@@ -208,6 +208,71 @@
                 saveChannelLevel(channel, toggle ? toggle.checked : true, levelSelect.value, autoResetEnabled, btn, levelSelect, card);
             });
         });
+
+        // Database level selects (for channels with DB handler, like security)
+        document.querySelectorAll('.channel-db-level').forEach(function(select) {
+            select.addEventListener('change', function() {
+                var channel = this.dataset.channel;
+                var card = this.closest('.eap-logger-channel-card');
+                var saveBtn = card.querySelector('.channel-db-save-btn');
+                var originalLevel = this.dataset.original;
+                var newLevel = this.value;
+
+                // Show/hide save button based on whether level changed
+                if (newLevel !== originalLevel) {
+                    saveBtn.classList.remove('hidden');
+                    saveBtn.classList.add('eap-btn--pulse');
+                } else {
+                    saveBtn.classList.add('hidden');
+                    saveBtn.classList.remove('eap-btn--pulse');
+                }
+            });
+        });
+
+        // Save buttons for DB level changes
+        document.querySelectorAll('.channel-db-save-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var channel = this.dataset.channel;
+                var card = this.closest('.eap-logger-channel-card');
+                var dbLevelSelect = card.querySelector('.channel-db-level');
+
+                saveDbLevel(channel, dbLevelSelect.value, btn, dbLevelSelect);
+            });
+        });
+    }
+
+    /**
+     * Save database level (separate from file level)
+     */
+    function saveDbLevel(channel, dbLevel, btn, select) {
+        var originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="eap-spinner"></span> Saving...';
+
+        securePost(adminBasePath + '/logger/channel/update',
+            '_csrf_token=' + encodeURIComponent(csrfToken) +
+            '&channel=' + encodeURIComponent(channel) +
+            '&db_level=' + encodeURIComponent(dbLevel)
+        )
+        .then(function(data) {
+            if (data.success) {
+                // Update original value
+                select.dataset.original = dbLevel;
+                // Hide save button
+                btn.classList.add('hidden');
+                btn.classList.remove('eap-btn--pulse');
+                showToast('DB level saved: ' + dbLevel.charAt(0).toUpperCase() + dbLevel.slice(1), 'success');
+            } else {
+                showToast('Error: ' + (data.message || 'Failed'), 'error');
+            }
+        })
+        .catch(function(err) {
+            showToast('Network error: ' + err.message, 'error');
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
     }
 
     /**
@@ -794,6 +859,26 @@
         });
     }
 
+    // ==========================================================================
+    // Security Log Expandable Rows
+    // ==========================================================================
+
+    function initSecurityLogExpand() {
+        document.querySelectorAll('.eap-logger-expand-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var logId = this.dataset.logId;
+                var detailsRow = document.querySelector('[data-details-for="' + logId + '"]');
+
+                if (detailsRow) {
+                    var isExpanded = !detailsRow.classList.contains('hidden');
+                    detailsRow.classList.toggle('hidden');
+                    // Toggle expanded class on button for icon rotation
+                    this.classList.toggle('eap-logger-expand-btn--expanded', !isExpanded);
+                }
+            });
+        });
+    }
+
     function init() {
         initAutoResetToggles();
         initChannelManagement();
@@ -806,6 +891,75 @@
         initPhpErrorsClearForm();
         initBulkActions();
         initPasswordToggles();
+        initSecurityLogExpand();
+        initSecurityDbLevel();
+    }
+
+    /**
+     * Initialize Security Log DB Level selector
+     */
+    function initSecurityDbLevel() {
+        var dbLevelSelect = document.getElementById('security-db-level');
+        var saveBtn = document.getElementById('save-db-level-btn');
+        var statusEl = document.getElementById('db-level-status');
+
+        if (!dbLevelSelect || !saveBtn) return;
+
+        var originalValue = dbLevelSelect.dataset.original || 'warning';
+
+        // Show save button on change
+        dbLevelSelect.addEventListener('change', function() {
+            if (dbLevelSelect.value !== originalValue) {
+                saveBtn.classList.remove('hidden');
+                statusEl.textContent = '';
+                statusEl.className = 'eap-logger-db-level-status';
+            } else {
+                saveBtn.classList.add('hidden');
+            }
+        });
+
+        // Save button click
+        saveBtn.addEventListener('click', function() {
+            var newLevel = dbLevelSelect.value;
+            saveBtn.disabled = true;
+            statusEl.textContent = 'Saving...';
+            statusEl.className = 'eap-logger-db-level-status';
+
+            var formData = new FormData();
+            formData.append('channel', 'security');
+            formData.append('db_level', newLevel);
+            formData.append('csrf_token', csrfToken);
+
+            fetch(adminBasePath + '/logger/channel/update', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(parseJsonResponse)
+            .then(function(data) {
+                saveBtn.disabled = false;
+                if (data.success) {
+                    originalValue = newLevel;
+                    dbLevelSelect.dataset.original = newLevel;
+                    saveBtn.classList.add('hidden');
+                    statusEl.textContent = 'Saved';
+                    statusEl.className = 'eap-logger-db-level-status eap-logger-db-level-status--success';
+                    setTimeout(function() {
+                        statusEl.textContent = '';
+                    }, 3000);
+                } else {
+                    statusEl.textContent = data.message || 'Error saving';
+                    statusEl.className = 'eap-logger-db-level-status eap-logger-db-level-status--error';
+                }
+            })
+            .catch(function(error) {
+                saveBtn.disabled = false;
+                statusEl.textContent = 'Error: ' + error.message;
+                statusEl.className = 'eap-logger-db-level-status eap-logger-db-level-status--error';
+            });
+        });
     }
 
     // Run on DOMContentLoaded or immediately if already loaded

@@ -331,7 +331,8 @@ class RedisBufferHandler extends AbstractProcessingHandler
                 ));
             }
         } catch (\Throwable $e) {
-            // Non-critical, continue
+            // Non-critical, continue - but log for debugging
+            error_log('RedisBufferHandler: Queue trim failed - ' . $e->getMessage());
         }
     }
 

@@ -117,16 +117,25 @@ final class LoggerController extends BaseController
         ],
         'error' => [
             'name' => 'Error',
-            'description' => 'Application errors, exceptions, failures (+ database)',
+            'description' => 'Application errors, exceptions, failures',
             'icon' => 'alert-triangle',
             'color' => 'red',
             'file_prefix' => 'error',
             'allowed_levels' => ['error', 'critical', 'alert', 'emergency'],
         ],
+        'js_errors' => [
+            'name' => 'JavaScript Errors',
+            'description' => 'Client-side JS errors, exceptions, console logs',
+            'icon' => 'code',
+            'color' => 'yellow',
+            'file_prefix' => 'js_errors',
+            'allowed_levels' => null, // All levels allowed
+        ],
     ];
 
     /**
-     * Special channels (not in database, file-only)
+     * Special channels (not in database, file-only, read-only in UI)
+     * These are system-level logs that cannot be configured from the admin panel
      */
     private const SPECIAL_CHANNELS = [
         'php_errors' => [
@@ -149,13 +158,6 @@ final class LoggerController extends BaseController
             'icon' => 'server',
             'color' => 'green',
             'file_prefix' => 'nginx',
-        ],
-        'js_errors' => [
-            'name' => 'JavaScript Errors',
-            'description' => 'Client-side JavaScript errors, exceptions, and console logs',
-            'icon' => 'code',
-            'color' => 'yellow',
-            'file_prefix' => 'js_errors',
         ],
     ];
 
@@ -286,7 +288,18 @@ final class LoggerController extends BaseController
 
         // Security: validate filename
         if (!$this->isValidLogFilename($filename)) {
-            return $this->json(['error' => 'Invalid filename', 'code' => 'ERROR']);
+            return $this->view('logger/file-view', [
+                'filename' => $filename ?: '(empty)',
+                'exists' => false,
+                'error' => 'Invalid or unsafe filename',
+                'lines' => [],
+                'total_lines' => 0,
+                'page' => 1,
+                'per_page' => $perPage,
+                'pages' => 0,
+                'page_title' => 'Log: Invalid File',
+                'extra_styles' => ['/module-assets/enterprise-psr3-logger/css/logger.css'],
+            ]);
         }
 
         // Try to find the file - first in logsPath, then check system paths
@@ -345,6 +358,153 @@ final class LoggerController extends BaseController
     }
 
     /**
+     * Security Log Database Viewer
+     * GET /admin/logger/security
+     *
+     * Shows security channel logs from the database (security_log table)
+     * with filtering by level, date range, and search.
+     */
+    public function securityLog(): Response
+    {
+        // Ensure timezone is set from environment or default
+        $this->ensureTimezone();
+
+        $page = max(1, (int) $this->input('page', 1));
+        $perPage = (int) $this->input('per_page', 50);
+        $levelFilter = $this->input('level', '');
+        $search = $this->input('search', '');
+        $dateFrom = $this->input('from', '');
+        $dateTo = $this->input('to', '');
+
+        // Build query
+        $where = [];
+        $params = [];
+
+        if ($levelFilter !== '' && isset(self::LEVELS[$levelFilter])) {
+            $where[] = 'level_value >= :min_level';
+            $params[':min_level'] = self::LEVELS[$levelFilter];
+        }
+
+        if ($search !== '') {
+            // Database-agnostic search: use LOWER() for case-insensitive matching
+            // Works on both PostgreSQL and MySQL
+            $driver = $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+            if ($driver === 'pgsql') {
+                $where[] = '(message ILIKE :search OR context::text ILIKE :search)';
+            } else {
+                // MySQL: use LIKE with LOWER() for case-insensitive search
+                $where[] = '(LOWER(message) LIKE LOWER(:search) OR LOWER(CAST(context AS CHAR)) LIKE LOWER(:search))';
+            }
+            $params[':search'] = '%' . $search . '%';
+        }
+
+        if ($dateFrom !== '') {
+            $where[] = 'created_at >= :date_from';
+            $params[':date_from'] = $dateFrom . ' 00:00:00';
+        }
+
+        if ($dateTo !== '') {
+            $where[] = 'created_at <= :date_to';
+            $params[':date_to'] = $dateTo . ' 23:59:59';
+        }
+
+        $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        try {
+            // Get total count
+            $countSql = "SELECT COUNT(*) FROM security_log {$whereClause}";
+            $countStmt = $this->pdo->prepare($countSql);
+            $countStmt->execute($params);
+            $total = (int) $countStmt->fetchColumn();
+
+            // Calculate pagination
+            $pages = $total > 0 ? (int) ceil($total / $perPage) : 0;
+            $page = max(1, min($page, max(1, $pages)));
+            $offset = ($page - 1) * $perPage;
+
+            // Get logs with attacker identification columns
+            $sql = "SELECT id, channel, level, level_value, message,
+                           ip_address, user_id, user_email, user_agent, session_id,
+                           context, extra, created_at, request_id
+                    FROM security_log
+                    {$whereClause}
+                    ORDER BY created_at DESC
+                    LIMIT :limit OFFSET :offset";
+
+            $stmt = $this->pdo->prepare($sql);
+            foreach ($params as $key => $value) {
+                $stmt->bindValue($key, $value);
+            }
+            $stmt->bindValue(':limit', $perPage, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Parse JSON fields and format logs
+            $formattedLogs = array_map(function ($row) {
+                $row['context'] = $row['context'] ? json_decode($row['context'], true) : [];
+                $row['extra'] = $row['extra'] ? json_decode($row['extra'], true) : [];
+                $row['level_class'] = $this->getLevelClass(strtolower($row['level']));
+                $row['created_at_formatted'] = date('Y-m-d H:i:s', strtotime($row['created_at']));
+                return $row;
+            }, $logs);
+
+        } catch (\Exception $e) {
+            // Table might not exist yet
+            $formattedLogs = [];
+            $total = 0;
+            $pages = 0;
+            $page = 1;
+        }
+
+        // Get current DB min level for security channel
+        $dbMinLevel = 'warning'; // default
+        try {
+            $stmt = $this->pdo->prepare("SELECT config FROM log_channels WHERE channel = 'security'");
+            $stmt->execute();
+            $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if ($row && !empty($row['config'])) {
+                $config = json_decode($row['config'], true);
+                $dbMinLevel = $config['db_min_level'] ?? 'warning';
+            }
+        } catch (\Exception $e) {
+            // Ignore - use default
+        }
+
+        return $this->view('logger/security', [
+            'logs' => $formattedLogs,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'pages' => $pages,
+            'levels' => array_keys(self::LEVELS),
+            'level_filter' => $levelFilter,
+            'search' => $search,
+            'date_from' => $dateFrom,
+            'date_to' => $dateTo,
+            'db_min_level' => $dbMinLevel,
+            'page_title' => 'Security Log',
+            'extra_styles' => ['/module-assets/enterprise-psr3-logger/css/logger.css'],
+            'extra_scripts' => ['/module-assets/enterprise-psr3-logger/js/logger.js'],
+        ]);
+    }
+
+    /**
+     * Get CSS class for log level
+     */
+    private function getLevelClass(string $level): string
+    {
+        return match ($level) {
+            'emergency', 'alert', 'critical', 'error' => 'danger',
+            'warning' => 'warning',
+            'notice', 'info' => 'info',
+            'debug' => 'secondary',
+            default => 'secondary',
+        };
+    }
+
+    /**
      * Update channel configuration (AJAX)
      * POST /admin/logger/channel/update
      *
@@ -361,6 +521,7 @@ final class LoggerController extends BaseController
         $channel = $this->input('channel', '');
         $enabled = $this->input('enabled') === '1' || $this->input('enabled') === 'true';
         $level = $this->input('level', 'warning');
+        $dbLevel = $this->input('db_level'); // Optional: separate level for database logging
         $toggleOnly = $this->input('toggle_only') === '1';
         $autoResetToggle = $this->input('auto_reset_toggle') === '1';
 
@@ -368,12 +529,20 @@ final class LoggerController extends BaseController
         $autoResetEnabledInput = $this->input('auto_reset_enabled');
         $isAutoResetToggleChange = $autoResetEnabledInput !== null;
 
+        // Check if this is a db_level only change
+        $isDbLevelChange = $dbLevel !== null;
+
         if (!isset(self::CHANNELS[$channel])) {
             return $this->json(['success' => false, 'message' => 'Invalid channel']);
         }
 
         if (!isset(self::LEVELS[$level])) {
             return $this->json(['success' => false, 'message' => 'Invalid log level']);
+        }
+
+        // Validate db_level if provided
+        if ($dbLevel !== null && !isset(self::LEVELS[$dbLevel])) {
+            return $this->json(['success' => false, 'message' => 'Invalid database log level']);
         }
 
         // Validate level is allowed for this channel
@@ -401,7 +570,39 @@ final class LoggerController extends BaseController
                 $autoResetAt = date('Y-m-d H:i:s', time() + ($this->autoResetHours * 3600));
             }
 
-            // Update log_channels table
+            // Handle db_level update separately (updates config JSONB field)
+            if ($isDbLevelChange) {
+                $stmt = $this->pdo->prepare('
+                    UPDATE log_channels
+                    SET config = config || :db_config, updated_at = NOW()
+                    WHERE channel = :channel
+                ');
+                $stmt->execute([
+                    ':db_config' => json_encode(['db_min_level' => $dbLevel]),
+                    ':channel' => $channel,
+                ]);
+
+                // Log the change
+                $user = $this->getUser();
+                Logger::channel('security')->warning('Log channel database level changed', [
+                    'channel' => $channel,
+                    'old_db_level' => $oldConfig['config']['db_min_level'] ?? 'warning',
+                    'new_db_level' => $dbLevel,
+                    'user_id' => $user['id'] ?? 0,
+                    'ip' => $this->getClientIp(),
+                ]);
+
+                $this->invalidateChannelCache($channel);
+                $this->invalidateOpcache();
+
+                return $this->json([
+                    'success' => true,
+                    'message' => 'Database log level updated',
+                    'db_level' => $dbLevel,
+                ]);
+            }
+
+            // Update log_channels table (for file level, enabled, auto-reset)
             $stmt = $this->pdo->prepare('
                 INSERT INTO log_channels (channel, min_level, enabled, description, auto_reset_enabled, auto_reset_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, NOW())
@@ -1172,11 +1373,14 @@ final class LoggerController extends BaseController
         $dbChannels = [];
 
         try {
-            $stmt = $this->pdo->query('SELECT channel, min_level, enabled, auto_reset_enabled, auto_reset_at FROM log_channels');
+            $stmt = $this->pdo->query('SELECT channel, min_level, enabled, handlers, config, auto_reset_enabled, auto_reset_at FROM log_channels');
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 // Normalize database boolean values to PHP bool (handles PostgreSQL t/f, MySQL 0/1, etc.)
                 $row['enabled'] = $this->normalizeDbBool($row['enabled']);
                 $row['auto_reset_enabled'] = $this->normalizeDbBool($row['auto_reset_enabled']);
+                // Parse JSONB fields
+                $row['handlers'] = json_decode($row['handlers'] ?? '["file"]', true) ?: ['file'];
+                $row['config'] = json_decode($row['config'] ?? '{}', true) ?: [];
                 $dbChannels[$row['channel']] = $row;
             }
         } catch (\Exception $e) {
@@ -1191,6 +1395,8 @@ final class LoggerController extends BaseController
                 'key' => $key,
                 'enabled' => $dbConfig !== null ? $dbConfig['enabled'] : true,
                 'level' => $dbConfig !== null ? ($dbConfig['min_level'] ?? 'warning') : 'warning',
+                'handlers' => $dbConfig !== null ? $dbConfig['handlers'] : ['file'],
+                'config' => $dbConfig !== null ? $dbConfig['config'] : [],
                 'auto_reset_enabled' => $dbConfig !== null ? $dbConfig['auto_reset_enabled'] : true,
                 'auto_reset_at' => $dbConfig !== null ? ($dbConfig['auto_reset_at'] ?? null) : null,
                 'allowed_levels' => $meta['allowed_levels'] ?? null,
@@ -1229,13 +1435,24 @@ final class LoggerController extends BaseController
             $size = $stat['size'];
             $modified = $stat['mtime'];
 
-            // Extract channel from filename (e.g., "app-2026-01-27.log" -> "app")
+            // Extract channel from filename
+            // Patterns: "channel-YYYY-MM-DD.log" OR "channel.log"
             $channel = 'unknown';
             if (preg_match('/^([a-z_]+)-\d{4}-\d{2}-\d{2}\.log$/', $file, $matches)) {
+                // With date: app-2026-01-27.log -> app
                 $channel = $matches[1];
                 // Map 'errors' to 'error' channel (legacy naming)
                 if ($channel === 'errors') {
                     $channel = 'error';
+                }
+            } elseif (preg_match('/^([a-z_]+)\.log$/', $file, $matches)) {
+                // Without date: security.log -> security, app.log -> default
+                $channel = $matches[1];
+                // Map legacy/alternative names to standard channels
+                if ($channel === 'errors') {
+                    $channel = 'error';
+                } elseif ($channel === 'app') {
+                    $channel = 'default';
                 }
             } elseif ($file === 'php_errors.log') {
                 $channel = 'php_errors';
@@ -1243,8 +1460,6 @@ final class LoggerController extends BaseController
                 $channel = 'php-fpm';
             } elseif (str_starts_with($file, 'nginx-')) {
                 $channel = 'nginx';
-            } elseif (str_starts_with($file, 'js_errors')) {
-                $channel = 'js_errors';
             }
 
             // Extract date
@@ -1794,8 +2009,11 @@ final class LoggerController extends BaseController
 
         // Whitelist of valid filename patterns (no wildcards for security)
         $validPatterns = [
-            // Application log files: channel-YYYY-MM-DD.log
+            // Application log files WITH date: channel-YYYY-MM-DD.log
             '/^[a-z_]+-\d{4}-\d{2}-\d{2}\.log$/',
+
+            // Application log files WITHOUT date: channel.log (e.g., security.log, app.log)
+            '/^[a-z_]+\.log$/',
 
             // PHP error logs: php_errors.log, php-errors.log, php_error.log
             '/^php[_-]?errors?\.log$/i',
@@ -1811,13 +2029,6 @@ final class LoggerController extends BaseController
             // Nginx logs
             '/^nginx-access\.log$/i',
             '/^nginx-error\.log$/i',
-
-            // JavaScript error logs: js_errors-YYYY-MM-DD.log
-            '/^js_errors-\d{4}-\d{2}-\d{2}\.log$/',
-            '/^js_errors\.log$/i',
-
-            // System error/access logs
-            '/^(error|access)\.log$/i',
         ];
 
         foreach ($validPatterns as $pattern) {

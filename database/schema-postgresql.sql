@@ -1,7 +1,13 @@
 -- ============================================================================
--- PostgreSQL Schema for Enterprise PSR-3 Logger
+-- PostgreSQL Schema for Enterprise PSR-3 Logger - DATABASE HANDLER (OPTIONAL)
 -- ============================================================================
--- Run this to create the logs table in your PostgreSQL database
+-- !!! IMPORTANT !!!
+-- This schema is ONLY needed if you want to use the DatabaseHandler.
+-- By default, PSR3 Logger uses FILE-BASED logging (RotatingFileHandler).
+--
+-- DO NOT run this migration unless you specifically need database logging.
+-- The default file-based logging requires NO database tables.
+--
 -- Version: 2.0.0 - Enterprise Grade with full indexing
 -- ============================================================================
 
